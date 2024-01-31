@@ -65,6 +65,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cond_utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9f40e034e89ee41e710c37288a3198e654433acb8c0960eb3dc64976ec1a2d2"
+
+[[package]]
 name = "draw"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,6 +141,7 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 name = "quantamax"
 version = "0.1.0"
 dependencies = [
+ "cond_utils",
  "draw",
  "rand 0.8.5",
  "sdl2",
