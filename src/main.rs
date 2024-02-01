@@ -3,8 +3,6 @@ extern crate sdl2;
 use cond_utils::Between;
 use sdl2::pixels::Color;
 use std::fs::File;
-use std::io::prelude::*;
-use std::mem::Discriminant;
 use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -30,6 +28,21 @@ impl Sphere {
             radius: radius,
             center: center,
             color: color,
+        }
+    }
+}
+
+struct Light {
+    pub typ: String,
+    pub intensity: f64,
+    pub position: Vec<f64>
+}
+impl Light {
+    pub fn new (intensity: f64, typ: String, position: Vec<f64> ) -> Light {
+        Light {
+            intensity: intensity,
+            typ: typ,
+            position: position
         }
     }
 }
@@ -81,7 +94,11 @@ pub fn main() {
     let sphere2 = Sphere::new(1.0, vec![1.0,1.0,2.0], vec![0,225,0]);
     let sphere3 = Sphere::new(1.0, vec![-1.0,-1.0, 2.0], vec![0,0,225]);
     let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225]);
-    let mut spheres = vec![sphere2,sphere1,sphere3,sphere4];
+    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0]);
+    let mut spheres = vec![sphere2,sphere1,sphere3,sphere4,shere5];
+
+    let light = Light::new(1.0, String::from("Point"), vec![0.0,0.0,0.0]);
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -171,6 +188,7 @@ fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, sphe
         return vec![225, 225, 225]
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
+    let intersects: Vec<f64> = vec3_addition(camera_origin, vec3_multiply_by_float(view, closest_t));
     return closest_sphere.unwrap().color.clone();
 }
 
@@ -220,4 +238,38 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     //println!("{:?}", view);
     return view;
     
+}
+
+fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: Light) -> f64 {
+    let mut i: f64 = 0.0;
+    let mut light_direction: Vec<f64> = vec![0.0,0.0,0.0];
+    //for light in light
+    if light.typ == "Ambient" {
+        i += light.intensity;
+    }
+    else {
+        if light.typ == "Point" {
+            light_direction = vec![light.position[0] - intersection[0], light.position[1] - intersection[1], light.position[2] - intersection[2]];
+        }
+        else {
+            //for directional light
+        }
+        let n_dot_l = dot_product(&normal, &light_direction);
+        if n_dot_l > 0.0 {
+            i += light.intensity * n_dot_l/(vec3_length(normal) * vec3_length(light_direction))
+        }
+    }
+    return i
+}
+
+//vector manipulation functions
+fn vec3_addition(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
+    todo!()
+}
+fn vec3_multiply_by_float(vec3: Vec<f64>, multiplier: f64) -> Vec<f64> {
+    todo!()
+
+}
+fn vec3_length(normal: Vec<f64>) -> f64 {
+    todo!()
 }
