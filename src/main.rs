@@ -14,18 +14,18 @@ use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
 
-const WIDTH: u32 = 1000;
+const WIDTH: u32 = 500;
 const HEIGHT: u32 = 500;
 
 #[derive(PartialEq)]
 struct Sphere {
-    pub radius: i32,
-    pub center: Vec<i32>,
+    pub radius: f64,
+    pub center: Vec<f64>,
     pub color: Vec<u8>,
 
 }
 impl Sphere {
-    pub fn new(radius: i32, center: Vec<i32>, color: Vec<u8>) -> Sphere {
+    pub fn new(radius: f64, center: Vec<f64>, color: Vec<u8>) -> Sphere {
         Sphere {
             radius: radius,
             center: center,
@@ -77,9 +77,11 @@ pub fn main() {
 
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
-    //let mut sphere1 = Sphere::new(100, vec![2,0, -5], vec![225,0,0]);
-    let mut sphere2 = Sphere::new(2, vec![0,0,5], vec![0,225,0]);
-    let mut spheres = vec![sphere2];
+    let sphere1 = Sphere::new(1.0, vec![-1.0,1.0, 2.0], vec![225,0,0]);
+    let sphere2 = Sphere::new(1.0, vec![1.0,1.0,2.0], vec![0,225,0]);
+    let sphere3 = Sphere::new(1.0, vec![-1.0,-1.0, 2.0], vec![0,0,225]);
+    let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225]);
+    let mut spheres = vec![sphere2,sphere1,sphere3,sphere4];
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -127,11 +129,17 @@ pub fn main() {
 
         for x in -window_width_half..window_width_half {
             for y in -window_height_half..window_height_half {
-                let view = canvas_to_viewport(x, y, (WIDTH*5) as i32, (HEIGHT*5) as i32, 1);
+                let fov = 180.0;
+                let view_width = (WIDTH as f64) / fov;
+                let view_height = (HEIGHT as f64) / fov;
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0);
                 //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
                 //write!(debug, "{}", debug_text);
-                let color = trace_ray(vec![0,0,0], view, 2, 200000000, &mut spheres);
-                put_pixel(&mut canvas, x, y, color)
+                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &mut spheres);
+                if color == vec![0, 225, 0 ] {
+                    //println!("circle")
+                }
+                put_pixel(&mut canvas, x, y, color);
            }
            //write!(debug, "{}", "new line");
         }
@@ -139,36 +147,37 @@ pub fn main() {
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-        break;
+        //break;
     }
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn trace_ray(camera_origin: Vec<i32>, view: Vec<i32>, tmin: i32, tmax: i32, spheres: &mut Vec<Sphere>) -> Vec<u8> {
+fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, spheres: &mut Vec<Sphere>) -> Vec<u8> {
     let mut closest_sphere: Option<&mut Sphere> = None;
-    let mut closest_t: i32 = 2147483647;
+    let mut closest_t: f64 = f64::INFINITY;
+    let mut intersects: Vec<f64>; 
     for sphere in spheres{
-        let intersects : Vec<f32> = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
-        if intersects[0].within(tmin as f32, tmax as f32) && intersects[0] < closest_t as f32 {
-            closest_t = intersects[0] as i32;
+        intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
+        if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
+            closest_t = intersects[0];
             closest_sphere = Some(sphere);
         }
-        if intersects[1].within(tmin as f32, tmax as f32) && intersects[1] < closest_t as f32 {
-            closest_t = intersects[1] as i32;
+        if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
+            closest_t = intersects[1];
             closest_sphere = Some(sphere)
         }
-        if closest_sphere == None {
-            return vec![225, 225, 225]
-        }
+    }
+    if closest_sphere == None {
+        return vec![225, 225, 225]
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
     return closest_sphere.unwrap().color.clone();
 }
 
-fn intersect_ray_sphere(camera_origin: &Vec<i32>, view: &Vec<i32>, sphere: &mut Sphere) -> Vec<f32> {
+fn intersect_ray_sphere(camera_origin: &Vec<f64>, view: &Vec<f64>, sphere: &mut Sphere) -> Vec<f64> {
     let radius = sphere.radius;
-    //let camera_to_center = vec![camera_origin[0] - sphere.center[0], camera_origin[1] - sphere.center[1], camera_origin[2] - sphere.center[2]];
-    let camera_to_center = vec![sphere.center[0] - camera_origin[0], sphere.center[1] - camera_origin[1], sphere.center[2] - camera_origin[2]];
+    let camera_to_center = vec![camera_origin[0] - sphere.center[0], camera_origin[1] - sphere.center[1], camera_origin[2] - sphere.center[2]];
+    //let camera_to_center = vec![sphere.center[0] - camera_origin[0], sphere.center[1] - camera_origin[1], sphere.center[2] - camera_origin[2]];
     //println!("{:?}",camera_to_center);
     //ray equation moddeled by point = t*view + camera_origin
     //circle equation moddled by dot_product(point - center, point - center) = r^2
@@ -180,34 +189,33 @@ fn intersect_ray_sphere(camera_origin: &Vec<i32>, view: &Vec<i32>, sphere: &mut 
     //finally: t^2*dot(view,view) + t*2dot(view, am_to_center) + dot(cam_to_center, cam_to_center) - r^2 = 0
     //DO QUADRATIC, SOLVE FOR T
     //println!("{:?}, {:?}", camera_to_center, view);
-    let a: f32 = dot_product(&view, &view) as f32;
-    let b :f32 = 2.0 * dot_product(&view, &camera_to_center) as f32;
-    let c: f32 = (dot_product(&camera_to_center, &camera_to_center) - radius.pow(2)) as f32;
+    let a: f64 = dot_product(&view, &view);
+    let b :f64 = 2.0 * dot_product(&view, &camera_to_center);
+    let c: f64 = (dot_product(&camera_to_center, &camera_to_center)) - radius.powi(2);
 
-    let discriminant: f32 = b.powf(2.0)  - 4.0*a*c;
+    let discriminant: f64 = b.powi(2)  - (4.0*a*c);
     if discriminant < 0.0 {
-        return vec![34359738368.0, 34359738368.0];
+        return vec![f64::INFINITY, f64::INFINITY];
     }
-    println!("{:?}", discriminant);
+    //println!("{:?}", discriminant);
     //then do quadratic formula
-    let t1: f32 = (-b + f32::sqrt(discriminant)) / (2.0*a);
-    let t2: f32 = (-b - f32::sqrt(discriminant)) / (2.0*a);
-    //print!("{:?}", t1);
-    //println!("{}", t1);
+    let t1: f64 = (-b + f64::sqrt(discriminant)) / (2.0*a);
+    let t2: f64 = (-b - f64::sqrt(discriminant)) / (2.0*a);
+    //println!("{}, {}", t1, t2);
     return vec![t1, t2];
 }
-fn dot_product(a: &Vec<i32>, b: &Vec<i32>) -> i32 {
-    let mut product: i32 = 0;
+fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
+    let mut product: f64 = 0.0;
     for i in 0..a.len(){
-        product += a[i] * b[i]
+        product = product +  (a[i] * b[i]);
     }
     return product;
 }
 
-fn canvas_to_viewport(x: i32, y: i32, view_width: i32, view_height: i32, distance: i32) -> Vec<i32> {
+fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64) -> Vec<f64> {
 
-    let view_x = (x*view_width/(WIDTH as i32));
-    let view_y = (y*view_height/(HEIGHT as i32));
+    let view_x:f64 = (x*view_width/(WIDTH as f64)) as f64;
+    let view_y:f64 = (y*view_height/(HEIGHT as f64)) as f64;
     let view = vec![view_x, view_y, distance];
     //println!("{:?}", view);
     return view;
