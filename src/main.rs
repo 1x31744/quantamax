@@ -3,6 +3,7 @@ extern crate sdl2;
 use cond_utils::Between;
 use sdl2::pixels::Color;
 use sdl2::sys::{False, True};
+use std::f64::INFINITY;
 use std::fs::File;
 use std::vec;
 use sdl2::event::Event;
@@ -16,7 +17,7 @@ use sdl2::rect::Point;
 const WIDTH: u32 = 500;
 const HEIGHT: u32 = 500;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 struct Sphere {
     pub radius: f64,
     pub center: Vec<f64>,
@@ -95,12 +96,12 @@ pub fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let window_width_half: i32 = (WIDTH/2) as i32;
-    let window_height_half: i32 = (HEIGHT/2) as i32;
-    let sphere1 = Sphere::new(1.0, vec![-1.0,1.0, 2.0], vec![225,0,0] , 1000.0);
-    let sphere2 = Sphere::new(1.0, vec![1.0,1.0,2.0], vec![0,225,0], 500.0);
-    let sphere3 = Sphere::new(1.0, vec![-1.0,-1.0, 2.0], vec![0,0,225], 500.0);
-    let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225], 9.0);
-    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0);
+    let mut window_height_half: i32 = (HEIGHT/2) as i32;
+    let mut sphere1 = Sphere::new(1.0, vec![-1.0,1.0, 2.0], vec![225,0,0] , 1000.0);
+    let mut sphere2 = Sphere::new(1.0, vec![1.0,1.0,2.0], vec![0,225,0], 500.0);
+    let mut sphere3 = Sphere::new(1.0, vec![-1.0,-1.0, 2.0], vec![0,0,225], 500.0);
+    let mut sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225], 9.0);
+    let mut shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0);
     let mut spheres = vec![sphere2,sphere1,sphere3,sphere4,shere5];
 
     let mut light = Light::new(1.0, String::from("Point"), vec![0.0,1.0,0.0]);
@@ -167,7 +168,7 @@ pub fn main() {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0);
                 //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
                 //write!(debug, "{}", debug_text);
-                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &mut spheres, &mut light);
+                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &mut light, &mut spheres);
                 if color == vec![0, 225, 0 ] {
                     //println!("circle")
                 }
@@ -184,38 +185,8 @@ pub fn main() {
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, spheres: &mut Vec<Sphere>, light: &mut Light) -> Vec<u8> {
-
-    let intersect_results: (Option<&mut Sphere>, f64) = find_intersects(&camera_origin, &view, tmin, tmax, spheres);
-    let closest_sphere = intersect_results.0;
-    let closest_t = intersect_results.1;
-    /*
-    for sphere in spheres{
-        intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
-        if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
-            closest_t = intersects[0];
-            closest_sphere = Some(sphere);
-        }
-        if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
-            closest_t = intersects[1];
-            closest_sphere = Some(sphere)
-        }
-    }
-    */
-    if closest_sphere == None {
-        return vec![225, 225, 225]
-    }
-    //assert_eq!(intersects,vec![0.0, 0.0]);
-    let unwraped_sphere = closest_sphere.unwrap();
-    let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
-    let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
-    normal = vec3_divide_by_float(&normal, vec3_length(&normal));
-    let light_intensity = compute_lighting(intersection, normal, light, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity);
-    
-    return multiply_color_by_float(&unwraped_sphere.color, light_intensity);
-}
-fn find_intersects<'a>(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: &'a mut Vec<Sphere>) -> (Option<&'a mut Sphere>, f64) {
-    let mut closest_sphere: Option<&'a mut Sphere> = None;
+fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, light: &mut Light, spheres: &mut Vec<Sphere>) -> Vec<u8> {
+    let mut closest_sphere: Option<&mut Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
     for sphere in spheres{
@@ -229,8 +200,36 @@ fn find_intersects<'a>(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tma
             closest_sphere = Some(sphere)
         }
     }
+    if closest_sphere == None {
+        return vec![225, 225, 225]
+    }
+    //assert_eq!(intersects,vec![0.0, 0.0]);
+    let unwraped_sphere = closest_sphere.unwrap();
+    let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
+    let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
+    normal = vec3_divide_by_float(&normal, vec3_length(&normal));
+    let light_intensity = compute_lighting(intersection, normal, light, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres);
+    
+    return multiply_color_by_float(&unwraped_sphere.color, light_intensity);
+}
+/* 
+fn find_intersects(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: & mut Vec<Sphere>) -> (Option<&mut Sphere>, f64) {
+    let mut closest_sphere: Option<& mut Sphere> = None;
+    let mut closest_t: f64 = f64::INFINITY;
+    let mut intersects: Vec<f64>;
+    for sphere in spheres{
+        intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
+        if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
+            closest_t = intersects[1];
+            closest_sphere = Some(sphere)
+        }
+        if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
+            closest_t = intersects[0];
+        }
+    }
     return  (closest_sphere, closest_t);
 }
+*/
 
 fn intersect_ray_sphere(camera_origin: &Vec<f64>, view: &Vec<f64>, sphere: &mut Sphere) -> Vec<f64> {
     let radius = sphere.radius;
@@ -280,9 +279,10 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: &mut Light, to_cam: Vec<f64>, specularity: f64) -> f64 {
+fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: &mut Light, to_cam: Vec<f64>, specularity: f64, spheres: &mut Vec<Sphere>) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64> = vec![0.0,0.0,0.0];
+    let t_max: f64;
     //for light in light
     if light.typ == "Ambient" {
         i += light.intensity;
@@ -290,9 +290,26 @@ fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: &mut Light,
     else {
         if light.typ == "Point" {
             light_direction = vec![light.position[0] - intersection[0], light.position[1] - intersection[1], light.position[2] - intersection[2]];
+            t_max = 1.0;
         }
         else {
             //for directional light
+            t_max = f64::INFINITY
+        }
+        //shadows
+        let mut shadow_sphere: Option<&Sphere> = None;
+        let mut shadow_t: f64 = f64::INFINITY;
+        let mut intersects: Vec<f64>;
+        for sphere in spheres{
+            intersects = intersect_ray_sphere(&intersection, &light_direction, sphere); //two intersections
+            if intersects[0].within(0.001, t_max) && intersects[0] < shadow_t {
+                shadow_t = intersects[0];
+                shadow_sphere = Some(sphere);
+            }
+            if intersects[1].within(0.001, t_max) && intersects[1] < shadow_t {
+                shadow_t = intersects[1];
+                shadow_sphere = Some(sphere)
+            }
         }
         //for diffuse reflection
         let n_dot_l = dot_product(&normal, &light_direction);
