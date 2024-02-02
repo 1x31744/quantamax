@@ -97,7 +97,7 @@ pub fn main() {
     let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0]);
     let mut spheres = vec![sphere2,sphere1,sphere3,sphere4,shere5];
 
-    let light = Light::new(1.0, String::from("Point"), vec![0.0,0.0,0.0]);
+    let mut light = Light::new(1.0, String::from("Point"), vec![0.0,1.0,0.0]);
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -152,7 +152,7 @@ pub fn main() {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0);
                 //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
                 //write!(debug, "{}", debug_text);
-                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &mut spheres);
+                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &mut spheres, &mut light);
                 if color == vec![0, 225, 0 ] {
                     //println!("circle")
                 }
@@ -169,7 +169,7 @@ pub fn main() {
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, spheres: &mut Vec<Sphere>) -> Vec<u8> {
+fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, spheres: &mut Vec<Sphere>, light: &mut Light) -> Vec<u8> {
     let mut closest_sphere: Option<&mut Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>; 
@@ -188,8 +188,13 @@ fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, sphe
         return vec![225, 225, 225]
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
-    let intersects: Vec<f64> = vec3_addition(camera_origin, vec3_multiply_by_float(view, closest_t));
-    return closest_sphere.unwrap().color.clone();
+    let unwraped_sphere = closest_sphere.unwrap();
+    let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
+    let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
+    normal = vec3_divide_by_float(&normal, vec3_length(&normal));
+    let light_intensity = compute_lighting(intersection, normal, light);
+    
+    return multiply_color_by_float(&unwraped_sphere.color, light_intensity);
 }
 
 fn intersect_ray_sphere(camera_origin: &Vec<f64>, view: &Vec<f64>, sphere: &mut Sphere) -> Vec<f64> {
@@ -240,7 +245,7 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: Light) -> f64 {
+fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: &mut Light) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64> = vec![0.0,0.0,0.0];
     //for light in light
@@ -256,20 +261,49 @@ fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: Light) -> f
         }
         let n_dot_l = dot_product(&normal, &light_direction);
         if n_dot_l > 0.0 {
-            i += light.intensity * n_dot_l/(vec3_length(normal) * vec3_length(light_direction))
+            i += (light.intensity * n_dot_l)/((vec3_length(&normal) * vec3_length(&light_direction)))
         }
     }
     return i
 }
 
 //vector manipulation functions
-fn vec3_addition(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
-    todo!()
+fn vec3_addition(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
+    let mut product: Vec<f64> = vec![0.0,0.0,0.0];
+    for i in 0..a.len() {
+        product[i] = a[i] + b[i]
+    }
+    return product;
 }
-fn vec3_multiply_by_float(vec3: Vec<f64>, multiplier: f64) -> Vec<f64> {
-    todo!()
+fn vec3_negation(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
+    let mut product: Vec<f64> = vec![0.0,0.0,0.0];
+    for i in 0..a.len() {
+        product[i] = a[i] - b[i]
+    }
+    return product;
+}
+fn vec3_multiply_by_float(vec3: &Vec<f64>, multiplier: f64) -> Vec<f64> {
+    let mut product: Vec<f64> = vec![0.0,0.0,0.0];
+    for i in 0..vec3.len() {
+        product[i] = multiplier * vec3[i]
+    }
+    return product
+}
+fn vec3_divide_by_float(vec3: &Vec<f64>, multiplier: f64) -> Vec<f64> {
+    let mut product: Vec<f64> = vec![0.0,0.0,0.0];
+    for i in 0..vec3.len() {
+        product[i] = vec3[i] / multiplier
+    }
+    return product
 
 }
-fn vec3_length(normal: Vec<f64>) -> f64 {
-    todo!()
+fn vec3_length(vec3: &Vec<f64>) -> f64 {
+    return f64::sqrt(vec3[0].powi(2) + vec3[1].powi(2)+ vec3[2].powi(2))
+}
+fn multiply_color_by_float(vec3: &Vec<u8>, multiplier: f64) -> Vec<u8> {
+    let mut product: Vec<u8> = vec![0,0,0];
+    for i in 0..vec3.len() {
+        product[i] = ((multiplier) * vec3[i] as f64).round() as u8
+    }
+    return product
 }
