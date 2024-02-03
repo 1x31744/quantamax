@@ -103,14 +103,24 @@ pub fn main() {
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
     let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
-    let light2 = Light::new(0.2, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
+    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
     let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
     let lights: Vec<Light> = vec![light, light2, light3];
 
     let fov: f64 = 270.0 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
-    let camera_position = vec![0.0,0.0,0.0];
+    let camera_position = vec![0.0,0.0,-5.0];
+
+    let camera_rotation_y: f64 = 90.0;
+    let camera_rotation_x: f64 = 90.0;
+    let camera_rotation_z: f64 = 179.0;
+
+    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
+                                               vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
+                                               vec![0.0,0.0,1.0]]; 
+
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -167,7 +177,7 @@ pub fn main() {
                         _ => {}
                     }
                 }
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0);
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
                 //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
                 //write!(debug, "{}", debug_text);
                 let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
@@ -294,11 +304,13 @@ fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
     return product;
 }
 
-fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64) -> Vec<f64> {
+fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64, z_rotation_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
 
     let view_x:f64 = (x*(WIDTH as f64)/view_width) as f64;
     let view_y:f64 = (y*(HEIGHT as f64)/view_height) as f64;
-    let view = vec![view_x, view_y, distance];
+    let mut view = vec![view_x, view_y, distance];
+
+    view = matrix_multiplication(z_rotation_matrix, view);
     //println!("{:?}", view);
     return view;
     
@@ -396,4 +408,13 @@ fn multiply_color_by_float(vec3: &Vec<u8>, multiplier: f64) -> Vec<u8> {
         product[i] = ((multiplier) * vec3[i] as f64).round() as u8
     }
     return product
+}
+fn matrix_multiplication(transformation: &Vec<Vec<f64>>, matrix: Vec<f64>) -> Vec<f64> {
+    let mut new = vec![0.0,0.0,0.0];
+    for i in 0..transformation.len() {
+        let trans = &transformation[i];
+        let product = dot_product(trans, &matrix);
+        new[i] = product
+    }
+    return new
 }
