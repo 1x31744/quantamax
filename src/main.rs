@@ -100,21 +100,21 @@ pub fn main() {
 
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
-    let sphere1 = Sphere::new(1.0, vec![0.0,-0.5, 2.0], vec![225,0,0] , 1000.0, 0.5);
-    let sphere2 = Sphere::new(1.0, vec![0.5,-1.0,4.0], vec![0,225,0], 500.0, 0.2);
-    let sphere3 = Sphere::new(1.0, vec![-3.0,-1.0, 3.0], vec![0,0,225], 500.0, 0.2);
-    let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225], 9.0, 0.5);
-    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.1);
-    let spheres = vec![sphere2,sphere1,sphere3,sphere4,shere5];
+    let sphere1 = Sphere::new(1.0, vec![0.0,-1.5, 1.5], vec![225,0,0] , -1.0, 0.5);
+    let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![0,225,0], 500.0, 0.5);
+    let sphere3 = Sphere::new(1.0, vec![1.5,-0.5, 1.7], vec![0,0,225], 500.0, 0.5);
+    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
+    let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
     let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
-    let light2 = Light::new(0.2, String::from("Directional"), vec![0.0,0.0,0.0], vec![-1.0, -4.0, -2.0]); 
+    let light2 = Light::new(0.2, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
     let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
     let lights: Vec<Light> = vec![light, light2, light3];
 
-    let fov: f64 = 180.0 as f64;
+    let fov: f64 = 120.0 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
+    let camera_position = vec![0.0,0.0,0.0];
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -174,7 +174,7 @@ pub fn main() {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0);
                 //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
                 //write!(debug, "{}", debug_text);
-                let color = trace_ray(vec![0.0,0.0,0.0], view, 0.0, f64::INFINITY, &lights, &spheres);
+                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
                 if color == vec![0, 225, 0 ] {
                     //println!("circle")
                 }
@@ -191,7 +191,7 @@ pub fn main() {
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, light: &Vec<Light>, spheres: &Vec<Sphere>) -> Vec<u8> {
+fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lights: &Vec<Light>, spheres: &Vec<Sphere>, recursion_depth: f64) -> Vec<u8> {
     let mut closest_sphere: Option<&Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
@@ -207,16 +207,39 @@ fn trace_ray(camera_origin: Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, ligh
         }
     }
     if closest_sphere == None {
-        return vec![225, 225, 225]
+        return vec![0, 0, 0]
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
     let unwraped_sphere = closest_sphere.unwrap();
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
-    let light_intensity = compute_lighting(intersection, normal, light, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres);
+    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres);
     
-    return multiply_color_by_float(&unwraped_sphere.color, light_intensity);
+    let local_color = multiply_color_by_float(&unwraped_sphere.color, light_intensity);
+
+    //compute reflection
+    let reflectivity = unwraped_sphere.reflectivity;
+
+    if recursion_depth < 0.0 || reflectivity == 0.0 {
+        return local_color
+    }
+
+    //pythagoras
+    let opposite_ray = vec3_multiply_by_float(&view, -1.0);
+    let reflection_with_view = vec3_multiply_by_float(&normal, 2.0 * dot_product(&normal, &opposite_ray));
+    let reflect_ray = vec3_negation(&reflection_with_view, &opposite_ray);
+
+
+    let reflected_color = trace_ray(&intersection, reflect_ray, 0.001, f64::INFINITY, lights, spheres, recursion_depth - 1.0);
+    //factor in reflectivity
+    let real_local = multiply_color_by_float(&local_color, 1.0-reflectivity);
+    let real_reflective = multiply_color_by_float(&reflected_color, reflectivity);
+    let mut global_color = vec![0,0,0];
+    for i in 0..real_local.len() {
+        global_color[i] = real_local[i] + real_reflective[i]
+    }
+    return global_color;
 }
 /* 
 fn find_intersects(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: & mut Vec<Sphere>) -> (Option<&mut Sphere>, f64) {
@@ -285,7 +308,7 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: Vec<f64>, normal: Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>) -> f64 {
+fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64> = vec![0.0,0.0,0.0];
     let mut t_max: f64;
