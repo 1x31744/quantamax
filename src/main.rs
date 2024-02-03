@@ -16,7 +16,7 @@ const WIDTH: u32 = 900;
 const HEIGHT: u32 = 900;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
-//! new libraries : piston2d-graphics, rust bindings for SFML
+// ! new libraries : piston2d-graphics, rust bindings for SFML
 
 #[derive(PartialEq, Clone)]
 struct Sphere {
