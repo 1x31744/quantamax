@@ -2,7 +2,7 @@ extern crate sdl2;
 
 use cond_utils::Between;
 use sdl2::pixels::Color;
-use std::vec;
+use std::{ops::Index, thread, vec};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
@@ -10,9 +10,13 @@ use sdl2::video::Window;
 use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
+use std::sync::{mpsc, Mutex};
 
 const WIDTH: u32 = 900;
 const HEIGHT: u32 = 900;
+
+//TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
+//! new libraries : piston2d-graphics, rust bindings for SFML
 
 #[derive(PartialEq, Clone)]
 struct Sphere {
@@ -52,7 +56,7 @@ impl Light {
 }
 
 
-fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: Vec<u8>) {
+fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
     //error handling for draw position out of range
@@ -71,8 +75,9 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: Vec<u8>) {
     canvas.set_draw_color(Color::RGB(color[0], color[1], color[2]));
     let point = Point::new(canvas_x, canvas_y);
     canvas.draw_point(point).expect("could not draw point");
+}
 
-
+fn trace_pixel() {
 
 }
 
@@ -110,11 +115,11 @@ pub fn main() {
     let fov: f64 = 270.0 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
-    let camera_position = vec![0.0,0.0,-5.0];
+    let camera_position = vec![0.0,0.0,-1.0];
 
     let camera_rotation_y: f64 = 90.0;
     let camera_rotation_x: f64 = 90.0;
-    let camera_rotation_z: f64 = 179.0;
+    let camera_rotation_z: f64 = 0.0;
 
     let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
@@ -165,28 +170,43 @@ pub fn main() {
             }
         }
         */
+        let multithreading = false;
+        if multithreading == false {
+            for x in -window_width_half..window_width_half {
+                for y in -window_height_half..window_height_half {
+                    let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                    let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                    put_pixel(&mut canvas, x, y, &color);                    
+               }
+            }
+        }
+        if multithreading == true {
+            let pixel_array: Vec<Vec<Vec<u8>>> = vec![vec![vec![0; 3]; HEIGHT as usize]; HEIGHT as usize]; 
+            for y in 0..pixel_array.len() {
+                //do this after rays have been computed
+                break;
+                for x in 0..pixel_array[0].len() {
+                    let color = &pixel_array[y][x];
+                    canvas.set_draw_color(Color::RGB(color[0], color[1], color[2]));
+                    let point = Point::new(x as i32, y as i32);
+                    canvas.draw_point(point).expect("could not draw point");
+                }
+            }
 
-        for x in -window_width_half..window_width_half {
-            for y in -window_height_half..window_height_half {
-                for event in event_pump.poll_iter() {
-                    match event {
-                        Event::Quit {..} |
-                        Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                            break 'running
-                        },
-                        _ => {}
-                    }
+            /* 
+            let mutex_width_half = Mutex::new(window_width_half);
+            let mutex_height_half = Mutex::new(window_height_half);
+            let handle = thread::spawn(move || {
+                for x in -window_width_half..window_width_half {
+                    for y in -window_height_half..window_height_half {
+                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                        //put_pixel(&mut *canvas_ref, x, y, color);
+                   }
                 }
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                //let debug_text = format!("x, y = {}, {} \n view = {:?} \n\n", x, y, viewport);
-                //write!(debug, "{}", debug_text);
-                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                if color == vec![0, 225, 0 ] {
-                    //println!("circle")
-                }
-                put_pixel(&mut canvas, x, y, color);
-           }
-           //write!(debug, "{}", "new line");
+            });
+            handle.join().unwrap();
+            */
         }
         println!("done");
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
