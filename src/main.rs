@@ -12,11 +12,12 @@ use std::time::Duration;
 use sdl2::rect::Point;
 use std::sync::{mpsc, Mutex};
 
-const WIDTH: u32 = 900;
-const HEIGHT: u32 = 900;
+const WIDTH: u32 = 200;
+const HEIGHT: u32 = 200;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
+// ! idea: do a pixel filter that draws 25% of pixels when moving, this will speed up alot for "real time" rendering
 
 #[derive(PartialEq, Clone)]
 struct Sphere {
