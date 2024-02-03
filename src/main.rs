@@ -23,15 +23,16 @@ struct Sphere {
     pub center: Vec<f64>,
     pub color: Vec<u8>,
     pub specularity: f64,
-
+    pub reflectivity: f64
 }
 impl Sphere {
-    pub fn new(radius: f64, center: Vec<f64>, color: Vec<u8>, specularity: f64) -> Sphere {
+    pub fn new(radius: f64, center: Vec<f64>, color: Vec<u8>, specularity: f64, reflectivity: f64) -> Sphere {
         Sphere {
             radius: radius,
             center: center,
             color: color,
             specularity: specularity,
+            reflectivity: reflectivity
         }
     }
 }
@@ -99,11 +100,11 @@ pub fn main() {
 
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
-    let sphere1 = Sphere::new(1.0, vec![0.0,-0.5, 2.0], vec![225,0,0] , 1000.0);
-    let sphere2 = Sphere::new(1.0, vec![0.5,-1.0,4.0], vec![0,225,0], 500.0);
-    let sphere3 = Sphere::new(1.0, vec![-3.0,-1.0, 3.0], vec![0,0,225], 500.0);
-    let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225], 9.0);
-    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0);
+    let sphere1 = Sphere::new(1.0, vec![0.0,-0.5, 2.0], vec![225,0,0] , 1000.0, 0.5);
+    let sphere2 = Sphere::new(1.0, vec![0.5,-1.0,4.0], vec![0,225,0], 500.0, 0.2);
+    let sphere3 = Sphere::new(1.0, vec![-3.0,-1.0, 3.0], vec![0,0,225], 500.0, 0.2);
+    let sphere4 = Sphere::new(1.0, vec![1.0,-1.0,2.0], vec![0,225,225], 9.0, 0.5);
+    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.1);
     let spheres = vec![sphere2,sphere1,sphere3,sphere4,shere5];
 
     let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
