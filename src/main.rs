@@ -2,9 +2,6 @@ extern crate sdl2;
 
 use cond_utils::Between;
 use sdl2::pixels::Color;
-use sdl2::sys::{False, True};
-use std::f64::INFINITY;
-use std::fs::File;
 use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -14,8 +11,8 @@ use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
 
-const WIDTH: u32 = 500;
-const HEIGHT: u32 = 500;
+const WIDTH: u32 = 900;
+const HEIGHT: u32 = 900;
 
 #[derive(PartialEq, Clone)]
 struct Sphere {
@@ -83,7 +80,6 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: Vec<u8>) {
 // TODO: finish dot product function and then finish sphere ray intersection function.
 
 pub fn main() {
-    let mut debug = File::create("debug.txt").expect("could not read debug file");
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -101,7 +97,7 @@ pub fn main() {
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
     let sphere1 = Sphere::new(1.0, vec![0.0,-1.5, 1.5], vec![225,0,0] , -1.0, 0.5);
-    let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![0,225,0], 500.0, 0.5);
+    let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![255,192,203], 500.0, 0.5);
     let sphere3 = Sphere::new(1.0, vec![1.5,-0.5, 1.7], vec![0,0,225], 500.0, 0.5);
     let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
@@ -111,7 +107,7 @@ pub fn main() {
     let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
     let lights: Vec<Light> = vec![light, light2, light3];
 
-    let fov: f64 = 120.0 as f64;
+    let fov: f64 = 270.0 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
     let camera_position = vec![0.0,0.0,0.0];
@@ -301,7 +297,7 @@ fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
 fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64) -> Vec<f64> {
 
     let view_x:f64 = (x*(WIDTH as f64)/view_width) as f64;
-    let view_y:f64 = (y*(HEIGHT as f64)/view_width) as f64;
+    let view_y:f64 = (y*(HEIGHT as f64)/view_height) as f64;
     let view = vec![view_x, view_y, distance];
     //println!("{:?}", view);
     return view;
@@ -310,7 +306,7 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
 
 fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>) -> f64 {
     let mut i: f64 = 0.0;
-    let mut light_direction: Vec<f64> = vec![0.0,0.0,0.0];
+    let mut light_direction: Vec<f64>;
     let mut t_max: f64;
     for light in light {
         if light.typ == "Ambient" {
