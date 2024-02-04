@@ -1,7 +1,8 @@
 extern crate sdl2;
 
 use cond_utils::Between;
-use sdl2::pixels::Color;
+use draw::render;
+use sdl2::pixels::{Color, PixelFormatEnum};
 use std::{ops::Index, thread, vec};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -11,6 +12,7 @@ use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
 use std::sync::{mpsc, Mutex};
+use sdl2::rect::Rect;
 
 const WIDTH: u32 = 200;
 const HEIGHT: u32 = 200;
@@ -75,6 +77,9 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
     //draw pixel
     canvas.set_draw_color(Color::RGB(color[0], color[1], color[2]));
     let point = Point::new(canvas_x, canvas_y);
+
+    // ! cannot use draw point anymore
+
     canvas.draw_point(point).expect("could not draw point");
 }
 
@@ -86,6 +91,7 @@ fn trace_pixel() {
 // TODO: finish dot product function and then finish sphere ray intersection function.
 
 pub fn main() {
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -99,6 +105,9 @@ pub fn main() {
     let mut canvas = window.into_canvas().build().unwrap();
     canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut texture_creator = canvas.texture_creator();
+    let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,WIDTH, HEIGHT).map_err(|e| e.to_string()).unwrap();
+    //let mut surface = window.surface(&event_pump);
 
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
@@ -173,6 +182,28 @@ pub fn main() {
         */
         let multithreading = false;
         if multithreading == false {
+            // TODO : let mut pixels = 
+            render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                for x in -window_width_half..window_width_half {
+                    for y in -window_height_half..window_height_half {
+                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                        let canvas_coords = transfer_coords(x, y);      
+                        let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
+                        println!("{:?}",  canvas_coords);
+                        println!("{}", pitch);
+                        //println!("{:?}",buffer);
+                        buffer[offset-1] = color[0];
+                        buffer[offset-1] = color[1];
+                        buffer[offset -1] = color[2];
+                        //println!("made a round")
+                   }
+                }
+            }).expect("what?"); 
+            let draw_rect = Rect::new(100, 100, 256, 256);
+            canvas.copy(&render_texture, None, Some(draw_rect));
+
+            /* 
             for x in -window_width_half..window_width_half {
                 for y in -window_height_half..window_height_half {
                     let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
@@ -180,6 +211,9 @@ pub fn main() {
                     put_pixel(&mut canvas, x, y, &color);                    
                }
             }
+            */
+
+            //canvas.draw_points(9);
         }
         if multithreading == true {
             let pixel_array: Vec<Vec<Vec<u8>>> = vec![vec![vec![0; 3]; HEIGHT as usize]; HEIGHT as usize]; 
@@ -216,6 +250,14 @@ pub fn main() {
         //break;
     }
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
+}
+
+fn transfer_coords(x: i32, y: i32) -> (i32, i32) {
+    let window_width_half: i32 = (WIDTH/2) as i32;
+    let window_height_half: i32 = (HEIGHT/2) as i32;
+    let canvas_x: i32 = (x + window_width_half) as i32;
+    let canvas_y: i32 = (window_height_half - y) as i32;
+    return (canvas_x, canvas_y)
 }
 
 fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lights: &Vec<Light>, spheres: &Vec<Sphere>, recursion_depth: f64) -> Vec<u8> {
