@@ -1,9 +1,8 @@
 extern crate sdl2;
 
 use cond_utils::Between;
-use draw::render;
 use sdl2::pixels::{Color, PixelFormatEnum};
-use std::{ops::Index, thread, vec};
+use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Canvas;
@@ -11,11 +10,10 @@ use sdl2::video::Window;
 use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
-use std::sync::{mpsc, Mutex};
 use sdl2::rect::Rect;
 
-const WIDTH: u32 = 500;
-const HEIGHT: u32 = 500;
+const WIDTH: u32 = 1000;
+const HEIGHT: u32 = 750;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -100,7 +98,7 @@ pub fn main() {
     let mut canvas = window.into_canvas().build().unwrap();
     canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut texture_creator = canvas.texture_creator();
+    let texture_creator = canvas.texture_creator();
     let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,WIDTH + 1, HEIGHT + 1).map_err(|e| e.to_string()).unwrap();
     //let mut surface = window.surface(&event_pump);
 
@@ -411,9 +409,11 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
             }
             //for diffuse reflection
             if shadow_sphere == None {
-                let n_dot_l = dot_product(&normal, &light_direction);
-                if n_dot_l > 0.0 {
-                    i += (light.intensity * n_dot_l)/((vec3_length(&normal) * vec3_length(&light_direction)))
+                let light_to_cam = dot_product(&normal, &light_direction);
+                if light_to_cam > 0.0 {
+                    //this is true because of trigonometry
+                    //cos = distance to cam / normal + light direction
+                    i += (light.intensity * light_to_cam)/((vec3_length(&normal) * vec3_length(&light_direction)))
                 }
                 //for specular reflection
                 if specularity != -1.0 {
