@@ -14,8 +14,8 @@ use sdl2::rect::Point;
 use std::sync::{mpsc, Mutex};
 use sdl2::rect::Rect;
 
-const WIDTH: u32 = 200;
-const HEIGHT: u32 = 200;
+const WIDTH: u32 = 500;
+const HEIGHT: u32 = 500;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -82,11 +82,6 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
 
     canvas.draw_point(point).expect("could not draw point");
 }
-
-fn trace_pixel() {
-
-}
-
 // TODO: replace all tuples with lists as tuples are bad practice for same typing
 // TODO: finish dot product function and then finish sphere ray intersection function.
 
@@ -106,7 +101,7 @@ pub fn main() {
     canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut texture_creator = canvas.texture_creator();
-    let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,WIDTH, HEIGHT).map_err(|e| e.to_string()).unwrap();
+    let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,WIDTH + 1, HEIGHT + 1).map_err(|e| e.to_string()).unwrap();
     //let mut surface = window.surface(&event_pump);
 
     let window_width_half: i32 = (WIDTH/2) as i32;
@@ -122,7 +117,7 @@ pub fn main() {
     let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
     let lights: Vec<Light> = vec![light, light2, light3];
 
-    let fov: f64 = 270.0 as f64;
+    let fov: f64 = 180 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
     let camera_position = vec![0.0,0.0,-1.0];
@@ -180,6 +175,8 @@ pub fn main() {
             }
         }
         */
+
+        // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
         let multithreading = false;
         if multithreading == false {
             // TODO : let mut pixels = 
@@ -190,18 +187,19 @@ pub fn main() {
                         let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
                         let canvas_coords = transfer_coords(x, y);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
-                        println!("{:?}",  canvas_coords);
-                        println!("{}", pitch);
+                        //println!("{:?}",  canvas_coords);
+                        //println!("{}", pitch);
                         //println!("{:?}",buffer);
-                        buffer[offset-1] = color[0];
-                        buffer[offset-1] = color[1];
-                        buffer[offset -1] = color[2];
+                        buffer[offset] = color[0];
+                        buffer[offset + 1] = color[1];
+                        buffer[offset + 2] = color[2];
+                        buffer[offset + 3] = 225;
                         //println!("made a round")
                    }
                 }
             }).expect("what?"); 
-            let draw_rect = Rect::new(100, 100, 256, 256);
-            canvas.copy(&render_texture, None, Some(draw_rect));
+            let draw_rect = Rect::new(0, 0, WIDTH, HEIGHT);
+            canvas.copy(&render_texture, None, Some(draw_rect)).expect("could not copy texture");
 
             /* 
             for x in -window_width_half..window_width_half {
