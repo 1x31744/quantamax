@@ -2,6 +2,7 @@ extern crate sdl2;
 
 use cond_utils::Between;
 use sdl2::pixels::{Color, PixelFormatEnum};
+use std::thread;
 use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -11,9 +12,10 @@ use core::panic;
 use std::time::Duration;
 use sdl2::rect::Point;
 use sdl2::rect::Rect;
+use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 1000;
-const HEIGHT: u32 = 750;
+const WIDTH: u32 = 400;
+const HEIGHT: u32 = 400;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -175,10 +177,115 @@ pub fn main() {
         */
 
         // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
-        let multithreading = false;
+        let multithreading = true;
         if multithreading == false {
             // TODO : let mut pixels = 
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                for x in -window_width_half..window_width_half {
+                    for y in -window_height_half..window_height_half {
+                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                        let canvas_coords = transfer_coords(x, y);      
+                        let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
+                        //println!("{:?}",  canvas_coords);
+                        //println!("{}", pitch);
+                        //println!("{:?}",buffer);
+                        buffer[offset] = color[0];
+                        buffer[offset + 1] = color[1];
+                        buffer[offset + 2] = color[2];
+                        //buffer[offset + 3] = 225;
+                        //println!("made a round")
+                   }
+                }
+            }).expect("what?"); 
+            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));
+
+            /* 
+            for x in -window_width_half..window_width_half {
+                for y in -window_height_half..window_height_half {
+                    let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                    let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                    put_pixel(&mut canvas, x, y, &color);                    
+               }
+            }
+            */
+
+            //canvas.draw_points(9);
+        }
+        if multithreading == true {
+            //create channels for communication between threads
+            let (tx, rx) = mpsc::channel();
+
+            //spawn multiple threads to update different sections of the texture
+            let handles: Vec<_> = (0..1)
+            .map(|i| {
+                let tx = tx.clone();
+                thread::spawn(move || {
+                    update_texture_region(i, tx);
+                })
+            }).collect();
+            println!("{:?}", rx);
+            //recieve updates from threads and apply to texture
+            for update in rx.try_iter() {
+                render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                    for (x, y, color) in update {
+                        let offset = x as usize * pitch as usize + y as usize * 3;
+                        //println!("{:?}",  canvas_coords);
+                        //println!("{}", pitch);
+                        //println!("{:?}",buffer);
+                        println!("hello");
+                        buffer[offset] = color.0;
+                        buffer[offset + 1] = color.0;
+                        buffer[offset + 2] = color.0;
+                        //buffer[offset + 3] = 225;
+                    }
+                }).expect("why error?");
+            }
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+
+            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
+            canvas.present();
+
+            for _ in 0..1 {
+                tx.send(Vec::new()).unwrap();
+            }
+
+
+            /*
+            let mut handles = vec![];
+            let num_of_threads =1;
+            let texture_mutex = Arc::new(Mutex::new(render_texture));
+            for i in 0..num_of_threads {
+                let mut text = Arc::clone(&texture_mutex);
+                let handle = thread::spawn(move || {
+                    let mut texture = text.lock().unwrap();
+                    let mut new = *texture;
+                    new.with_lock(None, |buffer: &mut[u8], pitch: usize| {
+
+                    });
+                });
+                handles.push(handle)
+            }
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                let mut handles = vec![];
+                let num_of_threads =1;
+                for i in 0..num_of_threads {
+                    let handle = thread::spawn(|| {
+                        
+                    });
+                    handles.push(handle)
+                }
+                for handle in handles {
+                    handle.join().unwrap();
+                }
+
+
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
                         let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
@@ -198,32 +305,6 @@ pub fn main() {
             }).expect("what?"); 
             let draw_rect = Rect::new(0, 0, WIDTH, HEIGHT);
             canvas.copy(&render_texture, None, Some(draw_rect)).expect("could not copy texture");
-
-            /* 
-            for x in -window_width_half..window_width_half {
-                for y in -window_height_half..window_height_half {
-                    let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                    let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                    put_pixel(&mut canvas, x, y, &color);                    
-               }
-            }
-            */
-
-            //canvas.draw_points(9);
-        }
-        if multithreading == true {
-            let pixel_array: Vec<Vec<Vec<u8>>> = vec![vec![vec![0; 3]; HEIGHT as usize]; HEIGHT as usize]; 
-            for y in 0..pixel_array.len() {
-                //do this after rays have been computed
-                break;
-                for x in 0..pixel_array[0].len() {
-                    let color = &pixel_array[y][x];
-                    canvas.set_draw_color(Color::RGB(color[0], color[1], color[2]));
-                    let point = Point::new(x as i32, y as i32);
-                    canvas.draw_point(point).expect("could not draw point");
-                }
-            }
-
             /* 
             let mutex_width_half = Mutex::new(window_width_half);
             let mutex_height_half = Mutex::new(window_height_half);
@@ -238,7 +319,9 @@ pub fn main() {
             });
             handle.join().unwrap();
             */
+            */
         }
+        canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));        
         println!("done");
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
@@ -246,6 +329,59 @@ pub fn main() {
         //break;
     }
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
+}
+
+fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>){
+    // --temp--
+    //define variables
+    let res_multiplier: u32 = 1;
+    let resolution: Vec<u32> = vec![WIDTH * res_multiplier, HEIGHT * res_multiplier]; 
+
+    let window_width_half: i32 = (WIDTH/2) as i32;
+    let window_height_half: i32 = (HEIGHT/2) as i32;
+    let sphere1 = Sphere::new(1.0, vec![0.0,-1.5, 1.5], vec![225,0,0] , -1.0, 0.5);
+    let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![255,192,203], 500.0, 0.5);
+    let sphere3 = Sphere::new(1.0, vec![1.5,-0.5, 1.7], vec![0,0,225], 500.0, 0.5);
+    let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
+    let spheres = vec![sphere2,sphere1,sphere3,shere5];
+
+    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
+    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
+    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
+    let lights: Vec<Light> = vec![light, light2, light3];
+
+    let fov: f64 = 180 as f64;
+    let view_width = (resolution[0] as f64) * fov;
+    let view_height = (resolution[1] as f64) * fov;
+    let camera_position = vec![0.0,0.0,-1.0];
+
+    let camera_rotation_y: f64 = 90.0;
+    let camera_rotation_x: f64 = 90.0;
+    let camera_rotation_z: f64 = 0.0;
+
+    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
+                                               vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
+                                               vec![0.0,0.0,1.0]]; 
+
+
+    let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
+
+    for x in -window_width_half..window_width_half {
+        for y in -window_height_half..window_height_half {
+            let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+            let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+            //println!("{:?}", color);
+            let canvas_coords = transfer_coords(x, y);
+
+            update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
+       }
+    }
+    //println!("{:?}", update);
+
+    tx.send(update).unwrap();
+    //thread::sleep(Duration::from_millis(50));
+
+        
 }
 
 fn transfer_coords(x: i32, y: i32) -> (i32, i32) {
