@@ -177,7 +177,7 @@ pub fn main() {
         */
 
         // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
-        let multithreading = true;
+        let multithreading = false;
         if multithreading == false {
             // TODO : let mut pixels = 
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
@@ -225,27 +225,25 @@ pub fn main() {
                 })
             }).collect();
             println!("{:?}", rx);
-            //recieve updates from threads and apply to texture
-            for update in rx.try_iter() {
-                render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-                    for (x, y, color) in update {
-                        let offset = x as usize * pitch as usize + y as usize * 3;
-                        //println!("{:?}",  canvas_coords);
-                        //println!("{}", pitch);
-                        //println!("{:?}",buffer);
-                        println!("hello");
-                        buffer[offset] = color.0;
-                        buffer[offset + 1] = color.0;
-                        buffer[offset + 2] = color.0;
-                        //buffer[offset + 3] = 225;
-                    }
-                }).expect("why error?");
-            }
 
             for handle in handles {
                 handle.join().unwrap();
             }
-
+            //recieve updates from threads and apply to texture
+            for update in rx.try_iter() {
+                render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                    for (x, y, color) in update {
+                        let offset = y as usize * pitch as usize + x as usize * 3;
+                        //println!("{:?}",  canvas_coords);
+                        //println!("{}", pitch);
+                        //println!("{:?}",buffer);
+                        buffer[offset] = color.0;
+                        buffer[offset + 1] = color.1;
+                        buffer[offset + 2] = color.2;
+                        //buffer[offset + 3] = 225;
+                    }
+                }).expect("why error?");
+            }
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
@@ -370,6 +368,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
         for y in -window_height_half..window_height_half {
             let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
             let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+            //println!("{:?}", color);
             //println!("{:?}", color);
             let canvas_coords = transfer_coords(x, y);
 
