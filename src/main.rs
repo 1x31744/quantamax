@@ -177,9 +177,8 @@ pub fn main() {
         */
 
         // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
-        let multithreading = false;
+        let multithreading = true;
         if multithreading == false {
-            // TODO : let mut pixels = 
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
@@ -217,14 +216,13 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..1)
+            let handles: Vec<_> = (0..18)
             .map(|i| {
                 let tx = tx.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx);
                 })
             }).collect();
-            println!("{:?}", rx);
 
             for handle in handles {
                 handle.join().unwrap();
@@ -247,7 +245,7 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
-            for _ in 0..1 {
+            for _ in 0..18{
                 tx.send(Vec::new()).unwrap();
             }
 
@@ -357,14 +355,23 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let camera_rotation_x: f64 = 90.0;
     let camera_rotation_z: f64 = 0.0;
 
+    let num_of_threads = 18;
+    let render_width = WIDTH/num_of_threads;
+    let half_render_width = render_width/2;
+
     let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
                                                vec![0.0,0.0,1.0]]; 
 
 
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
+    //width = 500
+    //window_width_half = 250
+    let starting_point = (-window_width_half + (render_width * (thread_id) as u32) as i32);
+    let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
+    let end_point = (window_width_half - (render_width * (max_negate_id) as u32) as i32);
 
-    for x in -window_width_half..window_width_half {
+    for x in starting_point as i32..end_point {
         for y in -window_height_half..window_height_half {
             let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
             let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
@@ -375,6 +382,63 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
        }
     }
+
+
+    /*
+    if thread_id == 0 {
+        for x in starting_point as i32..end_point {
+            for y in -window_height_half..window_height_half {
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                //println!("{:?}", color);
+                //println!("{:?}", color);
+                let canvas_coords = transfer_coords(x, y);
+
+                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
+           }
+        }
+    }
+    else if thread_id == 1 {
+        for x in -100..0 {
+            for y in -window_height_half..window_height_half {
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                //println!("{:?}", color);
+                //println!("{:?}", color);
+                let canvas_coords = transfer_coords(x, y);
+
+                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
+           }
+        }
+    }
+
+    if thread_id == 2 {
+        for x in 0..100 {
+            for y in -window_height_half..window_height_half {
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                //println!("{:?}", color);
+                //println!("{:?}", color);
+                let canvas_coords = transfer_coords(x, y);
+
+                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
+           }
+        }
+    }
+    else if thread_id == 3 {
+        for x in 100..200 {
+            for y in -window_height_half..window_height_half {
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                //println!("{:?}", color);
+                //println!("{:?}", color);
+                let canvas_coords = transfer_coords(x, y);
+
+                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
+           }
+        }
+    }
+    */
     //println!("{:?}", update);
 
     tx.send(update).unwrap();
