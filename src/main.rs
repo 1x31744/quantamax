@@ -216,7 +216,7 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..18)
+            let handles: Vec<_> = (0..15)
             .map(|i| {
                 let tx = tx.clone();
                 thread::spawn(move || {
@@ -245,7 +245,7 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
-            for _ in 0..18{
+            for _ in 0..15{
                 tx.send(Vec::new()).unwrap();
             }
 
@@ -355,7 +355,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let camera_rotation_x: f64 = 90.0;
     let camera_rotation_z: f64 = 0.0;
 
-    let num_of_threads = 18;
+    let num_of_threads = 15;
     let render_width = WIDTH/num_of_threads;
     let half_render_width = render_width/2;
 
