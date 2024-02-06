@@ -666,6 +666,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
             i += light.intensity;
         }
         else {
+            //set up light direction
             if light.typ == "Point" {
                 light_direction = vec![light.position[0] - intersection[0], light.position[1] - intersection[1], light.position[2] - intersection[2]];
                 t_max = 1.0;
@@ -674,6 +675,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 light_direction = light.direction.clone();
                 t_max = f64::INFINITY
             }
+            
             //shadows
             let mut shadow_sphere: Option<&Sphere> = None;
             let mut shadow_t: f64 = f64::INFINITY;
