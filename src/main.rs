@@ -15,8 +15,8 @@ use sdl2::rect::Point;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 400;
-const HEIGHT: u32 = 400;
+const WIDTH: u32 = 500;
+const HEIGHT: u32 = 500;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -46,15 +46,17 @@ struct Light {
     pub typ: String,
     pub intensity: f64,
     pub position: Vec<f64>,
-    pub direction: Vec<f64>
+    pub direction: Vec<f64>,
+    pub radius: f64,
 }
 impl Light {
-    pub fn new (intensity: f64, typ: String, position: Vec<f64>, direction: Vec<f64> ) -> Light {
+    pub fn new (intensity: f64, typ: String, position: Vec<f64>, direction: Vec<f64>, radius: f64) -> Light {
         Light {
             intensity: intensity,
             typ: typ,
             position: position,
             direction: direction,
+            radius: radius,
         }
     }
 }
@@ -113,9 +115,9 @@ pub fn main() {
     let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
-    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
-    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
-    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
+    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 1.0);
+    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 1.0); 
+    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0], 1.0);
     let lights: Vec<Light> = vec![light, light2, light3];
 
     let fov: f64 = 180 as f64;
@@ -125,9 +127,9 @@ pub fn main() {
 
     let mut camera_rotation_y: f64 = 0.0;
     let mut camera_rotation_x: f64 = 0.0;
-    let mut camera_rotation_z: f64 = 0.0;
+    let camera_rotation_z: f64 = 0.0;
 
-    let mut z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
+    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
                                                vec![0.0,0.0,1.0]]; 
     let mut x_rotation_matrix: Vec<Vec<f64>> = vec![vec![1.0, 0.0, 0.0],
@@ -151,7 +153,7 @@ pub fn main() {
                 Event::KeyDown {keycode: Some(Keycode::R), ..} => {
                     if r_change_safety {
                         if r_pressed {
-                            render_chance = 50;
+                            render_chance = 100;
                             r_pressed = false;
                         }
                         else if r_pressed == false {
@@ -299,9 +301,9 @@ pub fn main() {
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
                 let mut camera_position = camera_position.clone();
-                let mut z_rotation_matrix = z_rotation_matrix.clone();
-                let mut x_rotation_matrix = x_rotation_matrix.clone();
-                let mut y_rotation_matrix = y_rotation_matrix.clone();
+                let z_rotation_matrix = z_rotation_matrix.clone();
+                let x_rotation_matrix = x_rotation_matrix.clone();
+                let y_rotation_matrix = y_rotation_matrix.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
                     &x_rotation_matrix, &y_rotation_matrix);
@@ -426,9 +428,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
-    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0]);
-    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0]); 
-    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0]);
+    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 1.0);
+    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 1.0); 
+    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0], 1.0);
     let lights: Vec<Light> = vec![light, light2, light3];
 
     let fov: f64 = 180 as f64;
@@ -442,9 +444,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
     //width = 500
     //window_width_half = 250
-    let starting_point = (-window_width_half + (render_width * (thread_id) as u32) as i32);
+    let starting_point = window_width_half + (render_width * (thread_id) as u32) as i32;
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
-    let end_point = (window_width_half - (render_width * (max_negate_id) as u32) as i32);
+    let end_point = window_width_half - (render_width * (max_negate_id) as u32) as i32;
 
     let mut rng = rand::thread_rng();
     for x in starting_point as i32..end_point {
@@ -678,9 +680,11 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 t_max = f64::INFINITY
             }
             //shadows
+            /*
             let mut shadow_sphere: Option<&Sphere> = None;
             let mut shadow_t: f64 = f64::INFINITY;
             let mut intersects: Vec<f64>;
+            //TODO: there would be multiple light directions;
             for sphere in spheres{
                 intersects = intersect_ray_sphere(&intersection, &light_direction, sphere); //two intersections
                 if intersects[0].within(0.001, t_max) && intersects[0] < shadow_t {
@@ -692,13 +696,14 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                     shadow_sphere = Some(sphere)
                 }
             }
+            */
             //for diffuse reflection
             if shadow_sphere == None {
-                let light_to_cam = dot_product(&normal, &light_direction);
-                if light_to_cam > 0.0 {
+                let normal_dot_light = dot_product(&normal, &light_direction);
+                if normal_dot_light > 0.0 {
                     //this is true because of trigonometry
                     //cos = distance to cam / normal + light direction
-                    i += (light.intensity * light_to_cam)/((vec3_length(&normal) * vec3_length(&light_direction)))
+                    i += (light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))
                 }
                 //for specular reflection
                 if specularity != -1.0 {
@@ -714,6 +719,14 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
     }
     return i
 }
+fn compute_shadows_percentage(light: Light, spheres: &Vec<Sphere>, light_position: Vec<f64>, light_direction: Vec<f64>)  -> u8{ //u8 is percentage illumination
+    // ! compute angle from point to light
+    let ld_normalized_scale = 1.0/(f64::sqrt(light_direction[0].powi(2) + light_direction[1].powi(2) + light_direction[2].powi(2)));
+    let ld_normalized = vec3_multiply_by_float(&light_direction, ld_normalized_scale);
+    
+
+    todo!()
+} 
 
 //vector manipulation functions
 fn vec3_addition(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
