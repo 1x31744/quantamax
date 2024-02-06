@@ -3,7 +3,6 @@ extern crate sdl2;
 use rand::Rng;
 use cond_utils::Between;
 use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::sys::xdg_toplevel;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
@@ -124,17 +123,17 @@ pub fn main() {
     let view_height = (resolution[1] as f64) * fov;
     let mut camera_position = vec![0.0,0.0,-1.0];
 
-    let camera_rotation_y: f64 = 179.0;
-    let camera_rotation_x: f64 = 0.0;
-    let camera_rotation_z: f64 = 0.0;
+    let mut camera_rotation_y: f64 = 0.0;
+    let mut camera_rotation_x: f64 = 0.0;
+    let mut camera_rotation_z: f64 = 0.0;
 
-    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
+    let mut z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
                                                vec![0.0,0.0,1.0]]; 
-    let x_rotation_matrix: Vec<Vec<f64>> = vec![vec![1.0, 0.0, 0.0],
+    let mut x_rotation_matrix: Vec<Vec<f64>> = vec![vec![1.0, 0.0, 0.0],
                                                vec![0.0, f64::cos(camera_rotation_x).round(), -f64::sin(camera_rotation_x).round()],
                                                vec![0.0, f64::sin(camera_rotation_x).round(), f64::cos(camera_rotation_x).round()]];
-    let y_rotation_matrix: Vec<Vec<f64>> = vec![vec![f64::cos(camera_rotation_y).round(), 0.0, f64::sin(camera_rotation_y).round()],
+    let mut y_rotation_matrix: Vec<Vec<f64>> = vec![vec![f64::cos(camera_rotation_y).round(), 0.0, f64::sin(camera_rotation_y).round()],
                                                 vec![0.0,1.0,0.0],
                                                 vec![-f64::sin(camera_rotation_y).round(), 0.0, f64::cos(camera_rotation_y).round()]];
 
@@ -166,11 +165,53 @@ pub fn main() {
                     r_change_safety = true;
                 },
                 Event::KeyDown {keycode: Some(Keycode::W), ..} => {
-                    camera_position[2] += 0.1
+                    let original_move_direction = vec![0.0,0.0,0.1];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
                 },
                 Event::KeyDown {keycode: Some(Keycode::S), ..} => {
-                    camera_position[2] -= 0.1
+                    let original_move_direction = vec![0.0,0.0,-0.1];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
                 },
+                Event::KeyDown {keycode: Some(Keycode::D), ..} => {
+                    let original_move_direction = vec![0.1,0.0,0.0];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
+                },
+                Event::KeyDown {keycode: Some(Keycode::A), ..} => {
+                    let original_move_direction = vec![-0.1,0.0,0.0];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
+                },
+                Event::KeyDown {keycode: Some(Keycode::Up), ..} => {
+                    camera_rotation_x -= 0.1;
+                    x_rotation_matrix = vec![vec![1.0, 0.0, 0.0],
+                                               vec![0.0, f64::cos(camera_rotation_x), -f64::sin(camera_rotation_x)],
+                                               vec![0.0, f64::sin(camera_rotation_x), f64::cos(camera_rotation_x)]];
+                } 
+                Event::KeyDown {keycode: Some(Keycode::Down), ..} => {
+                    camera_rotation_x += 0.1;
+                    x_rotation_matrix = vec![vec![1.0, 0.0, 0.0],
+                                               vec![0.0, f64::cos(camera_rotation_x), -f64::sin(camera_rotation_x)],
+                                               vec![0.0, f64::sin(camera_rotation_x), f64::cos(camera_rotation_x)]];
+                } 
+                Event::KeyDown {keycode: Some(Keycode::Left), ..} => {
+                    camera_rotation_y -= 0.1;
+                    y_rotation_matrix = vec![vec![f64::cos(camera_rotation_y), 0.0, f64::sin(camera_rotation_y)],
+                                                vec![0.0,1.0,0.0],
+                                                vec![-f64::sin(camera_rotation_y), 0.0, f64::cos(camera_rotation_y)]];
+                } 
+                Event::KeyDown {keycode: Some(Keycode::Right), ..} => {
+                    camera_rotation_y += 0.1;
+                    y_rotation_matrix = vec![vec![f64::cos(camera_rotation_y), 0.0, f64::sin(camera_rotation_y)],
+                                                vec![0.0,1.0,0.0],
+                                                vec![-f64::sin(camera_rotation_y), 0.0, f64::cos(camera_rotation_y)]];
+                } 
 
 
 
