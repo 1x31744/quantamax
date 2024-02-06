@@ -2,16 +2,12 @@ extern crate sdl2;
 
 use rand::Rng;
 use cond_utils::Between;
-use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::pixels::PixelFormatEnum;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
-use core::panic;
 use std::time::Duration;
-use sdl2::rect::Point;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
@@ -59,7 +55,7 @@ impl Light {
     }
 }
 
-
+/* ! legacy put pixel function
 fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
@@ -85,6 +81,7 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
 }
 // TODO: replace all tuples with lists as tuples are bad practice for same typing
 // TODO: finish dot product function and then finish sphere ray intersection function.
+*/
 
 pub fn main() {
 
@@ -125,9 +122,9 @@ pub fn main() {
 
     let mut camera_rotation_y: f64 = 0.0;
     let mut camera_rotation_x: f64 = 0.0;
-    let mut camera_rotation_z: f64 = 0.0;
+    let camera_rotation_z: f64 = 0.0;
 
-    let mut z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
+    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
                                                vec![0.0,0.0,1.0]]; 
     let mut x_rotation_matrix: Vec<Vec<f64>> = vec![vec![1.0, 0.0, 0.0],
@@ -275,7 +272,7 @@ pub fn main() {
                    }
                 }
             }).expect("what?"); 
-            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));
+            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw to texture");
 
             /* 
             for x in -window_width_half..window_width_half {
@@ -299,9 +296,9 @@ pub fn main() {
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
                 let mut camera_position = camera_position.clone();
-                let mut z_rotation_matrix = z_rotation_matrix.clone();
-                let mut x_rotation_matrix = x_rotation_matrix.clone();
-                let mut y_rotation_matrix = y_rotation_matrix.clone();
+                let z_rotation_matrix = z_rotation_matrix.clone();
+                let x_rotation_matrix = x_rotation_matrix.clone();
+                let y_rotation_matrix = y_rotation_matrix.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
                     &x_rotation_matrix, &y_rotation_matrix);
@@ -401,7 +398,7 @@ pub fn main() {
             */
             */
         }
-        canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));        
+        canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw to texure");        
         println!("done");
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
@@ -442,9 +439,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
     //width = 500
     //window_width_half = 250
-    let starting_point = (-window_width_half + (render_width * (thread_id) as u32) as i32);
+    let starting_point = window_width_half + (render_width * (thread_id) as u32) as i32;
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
-    let end_point = (window_width_half - (render_width * (max_negate_id) as u32) as i32);
+    let end_point = window_width_half - (render_width * (max_negate_id) as u32) as i32;
 
     let mut rng = rand::thread_rng();
     for x in starting_point as i32..end_point {
