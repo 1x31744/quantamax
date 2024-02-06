@@ -3,6 +3,7 @@ extern crate sdl2;
 use rand::Rng;
 use cond_utils::Between;
 use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::sys::xdg_toplevel;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
@@ -123,20 +124,25 @@ pub fn main() {
     let view_height = (resolution[1] as f64) * fov;
     let mut camera_position = vec![0.0,0.0,-1.0];
 
-    let camera_rotation_y: f64 = 90.0;
-    let camera_rotation_x: f64 = 90.0;
+    let camera_rotation_y: f64 = 179.0;
+    let camera_rotation_x: f64 = 0.0;
     let camera_rotation_z: f64 = 0.0;
 
     let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
                                                vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
                                                vec![0.0,0.0,1.0]]; 
+    let x_rotation_matrix: Vec<Vec<f64>> = vec![vec![1.0, 0.0, 0.0],
+                                               vec![0.0, f64::cos(camera_rotation_x).round(), -f64::sin(camera_rotation_x).round()],
+                                               vec![0.0, f64::sin(camera_rotation_x).round(), f64::cos(camera_rotation_x).round()]];
+    let y_rotation_matrix: Vec<Vec<f64>> = vec![vec![f64::cos(camera_rotation_y).round(), 0.0, f64::sin(camera_rotation_y).round()],
+                                                vec![0.0,1.0,0.0],
+                                                vec![-f64::sin(camera_rotation_y).round(), 0.0, f64::cos(camera_rotation_y).round()]];
 
 
     let mut r_pressed: bool = true;
     let mut render_chance = 1000;
     let mut r_change_safety = true;
     'running: loop {
-        println!("{}", r_pressed);
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -146,10 +152,10 @@ pub fn main() {
                 Event::KeyDown {keycode: Some(Keycode::R), ..} => {
                     if r_change_safety {
                         if r_pressed {
-                            render_chance = 20;
+                            render_chance = 50;
                             r_pressed = false;
                         }
-                        if r_pressed == false {
+                        else if r_pressed == false {
                             render_chance = 1000;
                             r_pressed = true;
                         }
@@ -213,7 +219,7 @@ pub fn main() {
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
-                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
                         let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
                         let canvas_coords = transfer_coords(x, y);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
@@ -252,8 +258,12 @@ pub fn main() {
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
                 let mut camera_position = camera_position.clone();
+                let mut z_rotation_matrix = z_rotation_matrix.clone();
+                let mut x_rotation_matrix = x_rotation_matrix.clone();
+                let mut y_rotation_matrix = y_rotation_matrix.clone();
                 thread::spawn(move || {
-                    update_texture_region(i, tx, render_chance, &mut camera_position);
+                    update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
+                    &x_rotation_matrix, &y_rotation_matrix);
                 })
             }).collect();
 
@@ -360,7 +370,8 @@ pub fn main() {
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>){
+fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>
+, y_rotation_matrix: &Vec<Vec<f64>>){
     // --temp--
     //define variables
     let res_multiplier: u32 = 1;
@@ -383,17 +394,8 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
 
-    let camera_rotation_y: f64 = 90.0;
-    let camera_rotation_x: f64 = 90.0;
-    let camera_rotation_z: f64 = 0.0;
-
     let num_of_threads = 20;
     let render_width = WIDTH/num_of_threads;
-    let half_render_width = render_width/2;
-
-    let z_rotation_matrix: Vec<Vec<f64>> =vec![vec![f64::cos(camera_rotation_z).round(), -f64::sin(camera_rotation_z).round(), 0.0],
-                                               vec![f64::sin(camera_rotation_z).round(), f64::cos(camera_rotation_z).round(), 0.0],
-                                               vec![0.0,0.0,1.0]]; 
 
 
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
@@ -409,7 +411,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             let color: Vec<u8>;
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
                 color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
                 //println!("{:?}", color);
                 //println!("{:?}", color);
@@ -602,13 +604,16 @@ fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
     return product;
 }
 
-fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64, z_rotation_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
+fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>, y_rotation_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
 
     let view_x:f64 = (x*(WIDTH as f64)/view_width) as f64;
     let view_y:f64 = (y*(HEIGHT as f64)/view_height) as f64;
     let mut view = vec![view_x, view_y, distance];
 
     view = matrix_multiplication(z_rotation_matrix, view);
+    view = matrix_multiplication(x_rotation_matrix, view);
+    view = matrix_multiplication(y_rotation_matrix, view);
+
     //println!("{:?}", view);
     return view;
     
