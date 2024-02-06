@@ -1,5 +1,6 @@
 extern crate sdl2;
 
+use rand::Rng;
 use cond_utils::Between;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use std::thread;
@@ -120,7 +121,7 @@ pub fn main() {
     let fov: f64 = 180 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
-    let camera_position = vec![0.0,0.0,-1.0];
+    let mut camera_position = vec![0.0,0.0,-1.0];
 
     let camera_rotation_y: f64 = 90.0;
     let camera_rotation_x: f64 = 90.0;
@@ -131,17 +132,45 @@ pub fn main() {
                                                vec![0.0,0.0,1.0]]; 
 
 
+    let mut r_pressed: bool = true;
+    let mut render_chance = 1000;
+    let mut r_change_safety = true;
     'running: loop {
+        println!("{}", r_pressed);
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
+                Event::KeyDown {keycode: Some(Keycode::R), ..} => {
+                    if r_change_safety {
+                        if r_pressed {
+                            render_chance = 20;
+                            r_pressed = false;
+                        }
+                        if r_pressed == false {
+                            render_chance = 1000;
+                            r_pressed = true;
+                        }
+                    }
+                    r_change_safety = false;
+                },
+                Event::KeyUp {keycode: Some(Keycode::R), ..} => {
+                    r_change_safety = true;
+                },
+                Event::KeyDown {keycode: Some(Keycode::W), ..} => {
+                    camera_position[2] += 0.1
+                },
+                Event::KeyDown {keycode: Some(Keycode::S), ..} => {
+                    camera_position[2] -= 0.1
+                },
+
+
+
                 _ => {}
             }
         }
-        // The rest of the game loop goes here...
 
         //canvas.set_draw_color(Color::RGB(225, 225, 225));
         canvas.clear();
@@ -177,6 +206,8 @@ pub fn main() {
         */
 
         // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
+        
+
         let multithreading = true;
         if multithreading == false {
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
@@ -216,11 +247,13 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..15)
+            let handles: Vec<_> = (0..20)
             .map(|i| {
                 let tx = tx.clone();
+                let render_chance = render_chance.clone();
+                let mut camera_position = camera_position.clone();
                 thread::spawn(move || {
-                    update_texture_region(i, tx);
+                    update_texture_region(i, tx, render_chance, &mut camera_position);
                 })
             }).collect();
 
@@ -245,7 +278,7 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
-            for _ in 0..15{
+            for _ in 0..20{
                 tx.send(Vec::new()).unwrap();
             }
 
@@ -327,7 +360,7 @@ pub fn main() {
     ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
-fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>){
+fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>){
     // --temp--
     //define variables
     let res_multiplier: u32 = 1;
@@ -349,13 +382,12 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let fov: f64 = 180 as f64;
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
-    let camera_position = vec![0.0,0.0,-1.0];
 
     let camera_rotation_y: f64 = 90.0;
     let camera_rotation_x: f64 = 90.0;
     let camera_rotation_z: f64 = 0.0;
 
-    let num_of_threads = 15;
+    let num_of_threads = 20;
     let render_width = WIDTH/num_of_threads;
     let half_render_width = render_width/2;
 
@@ -371,12 +403,20 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
     let end_point = (window_width_half - (render_width * (max_negate_id) as u32) as i32);
 
+    let mut rng = rand::thread_rng();
     for x in starting_point as i32..end_point {
         for y in -window_height_half..window_height_half {
-            let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-            let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-            //println!("{:?}", color);
-            //println!("{:?}", color);
+            let color: Vec<u8>;
+            let render_chance = rng.gen_range(0..1000);
+            if render_chance < render_chance_max {
+                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
+                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                //println!("{:?}", color);
+                //println!("{:?}", color);
+            }
+            else  {
+                color = vec![0,0,0];
+            }
             let canvas_coords = transfer_coords(x, y);
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
