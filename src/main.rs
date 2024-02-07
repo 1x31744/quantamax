@@ -11,8 +11,8 @@ use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 200;
-const HEIGHT: u32 = 200;
+const WIDTH: u32 = 500;
+const HEIGHT: u32 = 500;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -137,9 +137,11 @@ pub fn main() {
                                                 vec![-f64::sin(camera_rotation_y).round(), 0.0, f64::cos(camera_rotation_y).round()]];
 
 
+    //config that changes in runtime
     let mut r_pressed: bool = true;
-    let mut render_chance = 50;
+    let mut render_chance = 200;
     let mut global_illumination = false;
+    let mut smooth_shadows = false;
     let mut r_change_safety = true;
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -151,13 +153,15 @@ pub fn main() {
                 Event::KeyDown {keycode: Some(Keycode::R), ..} => {
                     if r_change_safety {
                         if r_pressed {
-                            render_chance = 50;
+                            render_chance = 200;
                             global_illumination = false;
+                            smooth_shadows = false;
                             r_pressed = false;
                         }
                         else if r_pressed == false {
                             render_chance = 1000;
                             global_illumination = true;
+                            smooth_shadows = true;
                             r_pressed = true;
                         }
                     }
@@ -274,7 +278,7 @@ pub fn main() {
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
                         let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 2.0, global_illumination);
+                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 2.0, global_illumination, smooth_shadows);
                         let canvas_coords = transfer_coords(x, y);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
                         //println!("{:?}",  canvas_coords);
@@ -307,7 +311,7 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..20)
+            let handles: Vec<_> = (0..15)
             .map(|i| {
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
@@ -316,9 +320,10 @@ pub fn main() {
                 let x_rotation_matrix = x_rotation_matrix.clone();
                 let y_rotation_matrix = y_rotation_matrix.clone();
                 let global_illumination = global_illumination.clone();
+                let smooth_shadows = global_illumination.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix, global_illumination);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows);
                 })
             }).collect();
 
@@ -352,11 +357,13 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
-            for _ in 0..20{
+            for _ in 0..15{
                 tx.send(Vec::new()).unwrap();
             }
         }
-        println!("done");
+        if global_illumination {
+            println!("render finished")
+        }
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
@@ -365,7 +372,7 @@ pub fn main() {
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>
-, y_rotation_matrix: &Vec<Vec<f64>>, global_illumination: bool){
+, y_rotation_matrix: &Vec<Vec<f64>>, global_illumination: bool, smooth_shadows: bool){
     // --temp--
     //define variables
     let res_multiplier: u32 = 1;
@@ -408,7 +415,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 1.0, global_illumination);
+                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 5.0, global_illumination, smooth_shadows);
                 //println!("{:?}", color);
                 //println!("{:?}", color);
             }
@@ -435,7 +442,7 @@ fn transfer_coords(x: i32, y: i32) -> (i32, i32) {
 }
 
 fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lights: &Vec<Light>, spheres: &Vec<Sphere>, recursion_depth_reflection: f64, recursion_depth_indirect: f64
-, global_illumination: bool) -> Vec<u8> {
+, global_illumination: bool, smooth_shadows: bool) -> Vec<u8> {
     let mut closest_sphere: Option<&Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
@@ -458,7 +465,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
-    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, &camera_origin);
+    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, &camera_origin, smooth_shadows);
     
     let local_color = multiply_color_by_float(&unwraped_sphere.color, light_intensity);
 
@@ -478,24 +485,24 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let reflect_ray = vec3_negation(&reflection_with_view, &opposite_ray);
 
 
-    let reflected_color = trace_ray(&intersection, reflect_ray, 0.001, f64::INFINITY, lights, spheres, recursion_depth_reflection-1.0, recursion_depth_indirect, global_illumination);
+    let reflected_color = trace_ray(&intersection, reflect_ray, 0.001, f64::INFINITY, lights, spheres, recursion_depth_reflection-1.0, recursion_depth_indirect, global_illumination, smooth_shadows);
     
     let mut indirect_lighting: Vec<u8> = vec![0,0,0];
     if global_illumination == true {
         //indirect lighting comes after reflectivity? (also recursive)
         let mut rng = rand::thread_rng();
         if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
-            for _ in 0..10 { //num of indirect samples
+            for _ in 0..50 { //num of indirect samples
                 //produce random direction using the unit circle
                 let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
                 let normalized_random_direction = normalize(&random_direction);
-                let indirect_color = trace_ray(&intersection, normalized_random_direction , 0.001, f64::INFINITY, lights, spheres, 0.0, recursion_depth_indirect - 1.0, global_illumination);
+                let indirect_color = trace_ray(&intersection, normalized_random_direction , 0.001, f64::INFINITY, lights, spheres, 0.0, recursion_depth_indirect - 1.0, global_illumination, smooth_shadows);
                 for i in 0..indirect_color.len() {
                     indirect_lighting[i] = indirect_color[i] + indirect_lighting[i] //add indirect color to the total indirect ligting
                 }
             }
             //divide indirect by the number of samples
-            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/10.0);
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/50.0);
         }
         else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
     }
@@ -577,9 +584,10 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>, camera_origin: &Vec<f64>) -> f64 {
+fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>, camera_origin: &Vec<f64>, shadow_smoothing: bool) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64>;
+    let mut t_max = 0.0;
     for light in light {
         if light.typ == "Ambient" {
             i += light.intensity;
@@ -587,50 +595,65 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
         else {
             if light.typ == "Point" {
                 light_direction = vec![light.position[0] - intersection[0], light.position[1] - intersection[1], light.position[2] - intersection[2]];
-                //t_max = 1.0;
+                t_max = 1.0;
             }
             else {
                 light_direction = light.direction.clone();
-                //t_max = f64::INFINITY
+                t_max = f64::INFINITY
             }
-            //let mut shadow_sphere: Option<&Sphere> = None;
-            //shadows
-            // ! old shadow implmentation for sharp shadows ( can be used for low render mode to concerve recources when moving)
-            /*
-            let mut shadow_sphere: Option<&Sphere> = None;
-            let mut shadow_t: f64 = f64::INFINITY;
-            let mut intersects: Vec<f64>;
-            //TODO: there would be multiple light directions;
-            for sphere in spheres{
-                intersects = intersect_ray_sphere(&intersection, &light_direction, sphere); //two intersections
-                if intersects[0].within(0.001, t_max) && intersects[0] < shadow_t {
-                    shadow_t = intersects[0];
-                    shadow_sphere = Some(sphere);
+            if !shadow_smoothing { // ! old implementation for performance
+                let mut shadow_sphere: Option<&Sphere> = None;
+                let mut shadow_t: f64 = f64::INFINITY;
+                let mut intersects: Vec<f64>;
+                //TODO: there would be multiple light directions;
+                for sphere in spheres{
+                    intersects = intersect_ray_sphere(&intersection, &light_direction, sphere); //two intersections
+                    if intersects[0].within(0.001, t_max) && intersects[0] < shadow_t {
+                        shadow_t = intersects[0];
+                        shadow_sphere = Some(sphere);
+                    }
+                    if intersects[1].within(0.001, t_max) && intersects[1] < shadow_t {
+                        shadow_t = intersects[1];
+                        shadow_sphere = Some(sphere)
+                    }
                 }
-                if intersects[1].within(0.001, t_max) && intersects[1] < shadow_t {
-                    shadow_t = intersects[1];
-                    shadow_sphere = Some(sphere)
+                if !(shadow_sphere == None) {
+                    let normal_dot_light = dot_product(&normal, &light_direction);
+                    if normal_dot_light > 0.0 {
+                        //this is true because of trigonometry
+                        //cos = distance to cam / normal + light direction
+                        i += ((light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction))))
+                    }
+                    //for specular reflection
+                    if specularity != -1.0 {
+                        let reflection =  vec3_negation(&vec3_multiply_by_float(&normal, dot_product(&normal, &light_direction) * 2.0), &light_direction);
+                        let reflection_cam_distance = dot_product(&reflection, &to_cam);
+                        if reflection_cam_distance > 0.0 {
+                            i += light.intensity * f64::powf(reflection_cam_distance/(vec3_length(&reflection)* vec3_length(&to_cam)), specularity)
+                        }
+                    }
                 }
             }
-            */
-            let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position, &light_direction, camera_origin, intersection);
-            if light_percent < 1.0 {
-                //println!("{}", light_percent);
-            }
-
-            //for diffuse reflection
-            let normal_dot_light = dot_product(&normal, &light_direction);
-            if normal_dot_light > 0.0 {
-                //this is true because of trigonometry
-                //cos = distance to cam / normal + light direction
-                i += ((light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))) * light_percent as f64
-            }
-            //for specular reflection
-            if specularity != -1.0 {
-                let reflection =  vec3_negation(&vec3_multiply_by_float(&normal, dot_product(&normal, &light_direction) * 2.0), &light_direction);
-                let reflection_cam_distance = dot_product(&reflection, &to_cam);
-                if reflection_cam_distance > 0.0 {
-                    i += light.intensity * f64::powf(reflection_cam_distance/(vec3_length(&reflection)* vec3_length(&to_cam)), specularity)
+            else { // ! shadow smoothing implementation
+                let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position, &light_direction, camera_origin, intersection);
+                if light_percent < 1.0 {
+                    //println!("{}", light_percent);
+                }
+    
+                //for diffuse reflection
+                let normal_dot_light = dot_product(&normal, &light_direction);
+                if normal_dot_light > 0.0 {
+                    //this is true because of trigonometry
+                    //cos = distance to cam / normal + light direction
+                    i += ((light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))) * light_percent as f64
+                }
+                //for specular reflection
+                if specularity != -1.0 {
+                    let reflection =  vec3_negation(&vec3_multiply_by_float(&normal, dot_product(&normal, &light_direction) * 2.0), &light_direction);
+                    let reflection_cam_distance = dot_product(&reflection, &to_cam);
+                    if reflection_cam_distance > 0.0 {
+                        i += light.intensity * f64::powf(reflection_cam_distance/(vec3_length(&reflection)* vec3_length(&to_cam)), specularity)
+                    }
                 }
             }
         }
