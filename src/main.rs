@@ -2,21 +2,17 @@ extern crate sdl2;
 
 use rand::Rng;
 use cond_utils::Between;
-use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::pixels::PixelFormatEnum;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
-use core::panic;
 use std::time::Duration;
-use sdl2::rect::Point;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 500;
-const HEIGHT: u32 = 500;
+const WIDTH: u32 = 400;
+const HEIGHT: u32 = 400;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -61,7 +57,7 @@ impl Light {
     }
 }
 
-
+/* 
 fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
     let window_width_half: i32 = (WIDTH/2) as i32;
     let window_height_half: i32 = (HEIGHT/2) as i32;
@@ -85,6 +81,7 @@ fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
 
     canvas.draw_point(point).expect("could not draw point");
 }
+*/
 // TODO: replace all tuples with lists as tuples are bad practice for same typing
 // TODO: finish dot product function and then finish sphere ray intersection function.
 
@@ -153,7 +150,7 @@ pub fn main() {
                 Event::KeyDown {keycode: Some(Keycode::R), ..} => {
                     if r_change_safety {
                         if r_pressed {
-                            render_chance = 100;
+                            render_chance = 50;
                             r_pressed = false;
                         }
                         else if r_pressed == false {
@@ -277,7 +274,7 @@ pub fn main() {
                    }
                 }
             }).expect("what?"); 
-            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));
+            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw to texture");
 
             /* 
             for x in -window_width_half..window_width_half {
@@ -403,7 +400,6 @@ pub fn main() {
             */
             */
         }
-        canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT));        
         println!("done");
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
@@ -444,12 +440,14 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
     //width = 500
     //window_width_half = 250
-    let starting_point = window_width_half + (render_width * (thread_id) as u32) as i32;
+    let starting_point = -window_width_half + (render_width * (thread_id) as u32) as i32;
+
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
     let end_point = window_width_half - (render_width * (max_negate_id) as u32) as i32;
 
+    
     let mut rng = rand::thread_rng();
-    for x in starting_point as i32..end_point {
+    for x in starting_point..end_point {
         for y in -window_height_half..window_height_half {
             let color: Vec<u8>;
             let render_chance = rng.gen_range(0..1000);
@@ -467,65 +465,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
        }
     }
-
-
-    /*
-    if thread_id == 0 {
-        for x in starting_point as i32..end_point {
-            for y in -window_height_half..window_height_half {
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                //println!("{:?}", color);
-                //println!("{:?}", color);
-                let canvas_coords = transfer_coords(x, y);
-
-                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
-           }
-        }
-    }
-    else if thread_id == 1 {
-        for x in -100..0 {
-            for y in -window_height_half..window_height_half {
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                //println!("{:?}", color);
-                //println!("{:?}", color);
-                let canvas_coords = transfer_coords(x, y);
-
-                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
-           }
-        }
-    }
-
-    if thread_id == 2 {
-        for x in 0..100 {
-            for y in -window_height_half..window_height_half {
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                //println!("{:?}", color);
-                //println!("{:?}", color);
-                let canvas_coords = transfer_coords(x, y);
-
-                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
-           }
-        }
-    }
-    else if thread_id == 3 {
-        for x in 100..200 {
-            for y in -window_height_half..window_height_half {
-                let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                //println!("{:?}", color);
-                //println!("{:?}", color);
-                let canvas_coords = transfer_coords(x, y);
-
-                update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
-           }
-        }
-    }
-    */
-    //println!("{:?}", update);
-
     tx.send(update).unwrap();
     //thread::sleep(Duration::from_millis(50));
 
@@ -563,7 +502,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
-    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres);
+    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, &camera_origin);
     
     let local_color = multiply_color_by_float(&unwraped_sphere.color, light_intensity);
 
@@ -656,10 +595,9 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>) -> f64 {
+fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>, camera_origin: &Vec<f64>) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64>;
-    let mut t_max: f64;
     for light in light {
         if light.typ == "Ambient" {
             i += light.intensity;
@@ -667,13 +605,13 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
         else {
             if light.typ == "Point" {
                 light_direction = vec![light.position[0] - intersection[0], light.position[1] - intersection[1], light.position[2] - intersection[2]];
-                t_max = 1.0;
+                //t_max = 1.0;
             }
             else {
                 light_direction = light.direction.clone();
-                t_max = f64::INFINITY
+                //t_max = f64::INFINITY
             }
-            let mut shadow_sphere: Option<&Sphere> = None;
+            //let mut shadow_sphere: Option<&Sphere> = None;
             //shadows
             /*
             let mut shadow_sphere: Option<&Sphere> = None;
@@ -692,36 +630,68 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 }
             }
             */
+            let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position, &light_direction, camera_origin, intersection);
+            if light_percent < 1.0 {
+                //println!("{}", light_percent);
+            }
+
             //for diffuse reflection
-            if shadow_sphere == None {
-                let normal_dot_light = dot_product(&normal, &light_direction);
-                if normal_dot_light > 0.0 {
-                    //this is true because of trigonometry
-                    //cos = distance to cam / normal + light direction
-                    i += (light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))
-                }
-                //for specular reflection
-                if specularity != -1.0 {
-                    let reflection =  vec3_negation(&vec3_multiply_by_float(&normal, dot_product(&normal, &light_direction) * 2.0), &light_direction);
-                    let reflection_cam_distance = dot_product(&reflection, &to_cam);
-                    if reflection_cam_distance > 0.0 {
-                        i += light.intensity * f64::powf(reflection_cam_distance/(vec3_length(&reflection)* vec3_length(&to_cam)), specularity)
-                    }
+            let normal_dot_light = dot_product(&normal, &light_direction);
+            if normal_dot_light > 0.0 {
+                //this is true because of trigonometry
+                //cos = distance to cam / normal + light direction
+                i += ((light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))) * light_percent as f64
+            }
+            //for specular reflection
+            if specularity != -1.0 {
+                let reflection =  vec3_negation(&vec3_multiply_by_float(&normal, dot_product(&normal, &light_direction) * 2.0), &light_direction);
+                let reflection_cam_distance = dot_product(&reflection, &to_cam);
+                if reflection_cam_distance > 0.0 {
+                    i += light.intensity * f64::powf(reflection_cam_distance/(vec3_length(&reflection)* vec3_length(&to_cam)), specularity)
                 }
             }
-            
         }
     }
-    return i
+    return i;
 }
-fn compute_shadows_percentage(light: Light, spheres: &Vec<Sphere>, light_position: Vec<f64>, light_direction: Vec<f64>, camera_origin: &Vec<f64>)  -> u8{ //u8 is percentage illumination
+fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_position: &Vec<f64>, light_direction: &Vec<f64>, camera_origin: &Vec<f64>, intersection: &Vec<f64>)  -> f64{ //u8 is percentage illumination
     // ! compute angle from point, light_center and light edge
-    let num_of_samples = 20;
+    let num_of_samples = 100;
+    //let mut rng = rand::thread_rng();
+    let mut successful_samples = 0;
     for _ in 0..num_of_samples {
-        //sample point would be a random point on the circle
-        let sample_point_x 
-    }
 
+        //sample point would be a random point on the circle
+        let sample_point_x = light_position[0] + ((rand::random::<f64>() - 0.5) * 2.0) * light.radius;
+        let sample_point_y = light_position[1] + ((rand::random::<f64>() - 0.5) * 2.0) * light.radius;
+        let sample_point_z = light_position[2] + ((rand::random::<f64>() - 0.5) * 2.0) * light.radius;
+        let sample_point = vec![sample_point_x, sample_point_y, sample_point_z];
+
+        let shadow_ray = vec3_negation(&sample_point, &intersection);
+
+        //set up variables for calculating intersections
+        let mut shadow_sphere: Option<&Sphere> = None;
+        let mut shadow_t: f64 = f64::INFINITY;
+        let mut intersects: Vec<f64>;
+        let t_max = 1.0;
+
+        for sphere in spheres{
+            intersects = intersect_ray_sphere(&intersection, &shadow_ray, sphere); //two intersections
+            if intersects[0].within(0.001, t_max) && intersects[0] < shadow_t {
+                shadow_t = intersects[0];
+                shadow_sphere = Some(sphere);
+            }
+            if intersects[1].within(0.001, t_max) && intersects[1] < shadow_t {
+                shadow_t = intersects[1];
+                shadow_sphere = Some(sphere)
+            }
+        }
+        if !(shadow_sphere == None)  {
+            successful_samples += 1;
+        }
+    }
+    return successful_samples as f64/num_of_samples as f64; 
+    /* 
     let ld_normalized_scale = 1.0/(f64::sqrt(light_direction[0].powi(2) + light_direction[1].powi(2) + light_direction[2].powi(2)));
     let ld_normalized = vec3_multiply_by_float(&light_direction, ld_normalized_scale);
     let mut purpen_light = cross_product(&ld_normalized, &vec![0.0, 1.0, 0.0]);
@@ -733,12 +703,7 @@ fn compute_shadows_percentage(light: Light, spheres: &Vec<Sphere>, light_positio
 
     let to_light_edge = normalize(&vec3_negation(&vec3_addition(&light_position, &vec3_multiply_by_float(&purpen_light, light.radius)), camera_origin));
     let point_edge_center_angle = f64::acos(dot_product(&ld_normalized, &to_light_edge));
-
-
-
-    
-
-    todo!();
+    */
 } 
 
 fn cross_product(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
