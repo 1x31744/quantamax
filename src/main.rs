@@ -492,7 +492,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
         //indirect lighting comes after reflectivity? (also recursive)
         let mut rng = rand::thread_rng();
         if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
-            for _ in 0..50 { //num of indirect samples
+            for _ in 0..10 { //num of indirect samples
                 //produce random direction using the unit circle
                 let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
                 let normalized_random_direction = normalize(&random_direction);
@@ -502,7 +502,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
                 }
             }
             //divide indirect by the number of samples
-            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/50.0);
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/10.0);
         }
         else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
     }
