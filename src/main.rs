@@ -11,8 +11,8 @@ use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 400;
-const HEIGHT: u32 = 400;
+const WIDTH: u32 = 200;
+const HEIGHT: u32 = 200;
 
 //TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
 // ! new libraries : piston2d-graphics, rust bindings for SFML
@@ -138,7 +138,8 @@ pub fn main() {
 
 
     let mut r_pressed: bool = true;
-    let mut render_chance = 1000;
+    let mut render_chance = 50;
+    let mut global_illumination = false;
     let mut r_change_safety = true;
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -151,10 +152,12 @@ pub fn main() {
                     if r_change_safety {
                         if r_pressed {
                             render_chance = 50;
+                            global_illumination = false;
                             r_pressed = false;
                         }
                         else if r_pressed == false {
                             render_chance = 1000;
+                            global_illumination = true;
                             r_pressed = true;
                         }
                     }
@@ -187,6 +190,18 @@ pub fn main() {
                     let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
                     camera_position = vec3_addition(&with_y_rotation, &camera_position);
                 },
+                Event::KeyDown {keycode: Some(Keycode::Space), ..} => {
+                    let original_move_direction = vec![0.0,0.1,0.0];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
+                },
+                Event::KeyDown {keycode: Some(Keycode::Z), ..} => {
+                    let original_move_direction = vec![0.0,-0.1,0.0];
+                    let with_x_rotation = matrix_multiplication(&x_rotation_matrix, original_move_direction);
+                    let with_y_rotation = matrix_multiplication(&y_rotation_matrix, with_x_rotation);
+                    camera_position = vec3_addition(&with_y_rotation, &camera_position);
+                },
                 Event::KeyDown {keycode: Some(Keycode::Up), ..} => {
                     camera_rotation_x -= 0.1;
                     x_rotation_matrix = vec![vec![1.0, 0.0, 0.0],
@@ -211,7 +226,6 @@ pub fn main() {
                                                 vec![0.0,1.0,0.0],
                                                 vec![-f64::sin(camera_rotation_y), 0.0, f64::cos(camera_rotation_y)]];
                 } 
-
 
 
                 _ => {}
@@ -260,7 +274,7 @@ pub fn main() {
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
                         let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 2.0, global_illumination);
                         let canvas_coords = transfer_coords(x, y);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
                         //println!("{:?}",  canvas_coords);
@@ -301,13 +315,23 @@ pub fn main() {
                 let z_rotation_matrix = z_rotation_matrix.clone();
                 let x_rotation_matrix = x_rotation_matrix.clone();
                 let y_rotation_matrix = y_rotation_matrix.clone();
+                let global_illumination = global_illumination.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination);
                 })
             }).collect();
 
             for handle in handles {
+                for event in event_pump.poll_iter() {
+                    match event {
+                        Event::Quit {..} |
+                        Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                            break 'running
+                        },
+                        _ => {}
+                    }
+                }
                 handle.join().unwrap();
             }
             //recieve updates from threads and apply to texture
@@ -331,74 +355,6 @@ pub fn main() {
             for _ in 0..20{
                 tx.send(Vec::new()).unwrap();
             }
-
-
-            /*
-            let mut handles = vec![];
-            let num_of_threads =1;
-            let texture_mutex = Arc::new(Mutex::new(render_texture));
-            for i in 0..num_of_threads {
-                let mut text = Arc::clone(&texture_mutex);
-                let handle = thread::spawn(move || {
-                    let mut texture = text.lock().unwrap();
-                    let mut new = *texture;
-                    new.with_lock(None, |buffer: &mut[u8], pitch: usize| {
-
-                    });
-                });
-                handles.push(handle)
-            }
-            for handle in handles {
-                handle.join().unwrap();
-            }
-            render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-                let mut handles = vec![];
-                let num_of_threads =1;
-                for i in 0..num_of_threads {
-                    let handle = thread::spawn(|| {
-                        
-                    });
-                    handles.push(handle)
-                }
-                for handle in handles {
-                    handle.join().unwrap();
-                }
-
-
-                for x in -window_width_half..window_width_half {
-                    for y in -window_height_half..window_height_half {
-                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                        let canvas_coords = transfer_coords(x, y);      
-                        let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
-                        //println!("{:?}",  canvas_coords);
-                        //println!("{}", pitch);
-                        //println!("{:?}",buffer);
-                        buffer[offset] = color[0];
-                        buffer[offset + 1] = color[1];
-                        buffer[offset + 2] = color[2];
-                        buffer[offset + 3] = 225;
-                        //println!("made a round")
-                   }
-                }
-            }).expect("what?"); 
-            let draw_rect = Rect::new(0, 0, WIDTH, HEIGHT);
-            canvas.copy(&render_texture, None, Some(draw_rect)).expect("could not copy texture");
-            /* 
-            let mutex_width_half = Mutex::new(window_width_half);
-            let mutex_height_half = Mutex::new(window_height_half);
-            let handle = thread::spawn(move || {
-                for x in -window_width_half..window_width_half {
-                    for y in -window_height_half..window_height_half {
-                        let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                        let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                        //put_pixel(&mut *canvas_ref, x, y, color);
-                   }
-                }
-            });
-            handle.join().unwrap();
-            */
-            */
         }
         println!("done");
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
@@ -406,11 +362,10 @@ pub fn main() {
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
         //break;
     }
-    ::std::thread::sleep(Duration::new(10, 1_000_000_000u32 / 60));
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>
-, y_rotation_matrix: &Vec<Vec<f64>>){
+, y_rotation_matrix: &Vec<Vec<f64>>, global_illumination: bool){
     // --temp--
     //define variables
     let res_multiplier: u32 = 1;
@@ -453,7 +408,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
+                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 1.0, global_illumination);
                 //println!("{:?}", color);
                 //println!("{:?}", color);
             }
@@ -479,7 +434,8 @@ fn transfer_coords(x: i32, y: i32) -> (i32, i32) {
     return (canvas_x, canvas_y)
 }
 
-fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lights: &Vec<Light>, spheres: &Vec<Sphere>, recursion_depth: f64) -> Vec<u8> {
+fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lights: &Vec<Light>, spheres: &Vec<Sphere>, recursion_depth_reflection: f64, recursion_depth_indirect: f64
+, global_illumination: bool) -> Vec<u8> {
     let mut closest_sphere: Option<&Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
@@ -509,9 +465,12 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     //compute reflection
     let reflectivity = unwraped_sphere.reflectivity;
 
-    if recursion_depth < 0.0 || reflectivity == 0.0 {
+    if recursion_depth_reflection < 0.0 || reflectivity == 0.0 {
         return local_color
     }
+    
+
+
 
     //pythagoras
     let opposite_ray = vec3_multiply_by_float(&view, -1.0);
@@ -519,16 +478,42 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let reflect_ray = vec3_negation(&reflection_with_view, &opposite_ray);
 
 
-    let reflected_color = trace_ray(&intersection, reflect_ray, 0.001, f64::INFINITY, lights, spheres, recursion_depth - 1.0);
-    //factor in reflectivity
+    let reflected_color = trace_ray(&intersection, reflect_ray, 0.001, f64::INFINITY, lights, spheres, recursion_depth_reflection-1.0, recursion_depth_indirect, global_illumination);
+    
+    let mut indirect_lighting: Vec<u8> = vec![0,0,0];
+    if global_illumination == true {
+        //indirect lighting comes after reflectivity? (also recursive)
+        let mut rng = rand::thread_rng();
+        if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
+            for _ in 0..10 { //num of indirect samples
+                //produce random direction using the unit circle
+                let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
+                let normalized_random_direction = normalize(&random_direction);
+                let indirect_color = trace_ray(&intersection, normalized_random_direction , 0.001, f64::INFINITY, lights, spheres, 0.0, recursion_depth_indirect - 1.0, global_illumination);
+                for i in 0..indirect_color.len() {
+                    indirect_lighting[i] = indirect_color[i] + indirect_lighting[i] //add indirect color to the total indirect ligting
+                }
+            }
+            //divide indirect by the number of samples
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/10.0);
+        }
+        else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
+    }
+    //factor in reflectivity and indirect lighting
     let real_local = multiply_color_by_float(&local_color, 1.0-reflectivity);
     let real_reflective = multiply_color_by_float(&reflected_color, reflectivity);
-    let mut global_color = vec![0,0,0];
+    let mut global_color: Vec<u8> = vec![0,0,0];
     for i in 0..real_local.len() {
-        global_color[i] = real_local[i] + real_reflective[i]
+        global_color[i] = real_local[i] + real_reflective[i];
+        if global_illumination == true {
+            global_color[i] = global_color[i] + indirect_lighting[i];
+        }
+        //println!("{:?}", global_color);
+        if global_color[i] > 225 { global_color[i] = 225}
     }
     return global_color;
 }
+
 /* 
 fn find_intersects(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: & mut Vec<Sphere>) -> (Option<&mut Sphere>, f64) {
     let mut closest_sphere: Option<& mut Sphere> = None;
@@ -571,11 +556,9 @@ fn intersect_ray_sphere(camera_origin: &Vec<f64>, view: &Vec<f64>, sphere: &Sphe
     if discriminant < 0.0 {
         return vec![f64::INFINITY, f64::INFINITY];
     }
-    //println!("{:?}", discriminant);
     //then do quadratic formula
     let t1: f64 = (-b + f64::sqrt(discriminant)) / (2.0*a);
     let t2: f64 = (-b - f64::sqrt(discriminant)) / (2.0*a);
-    //println!("{}, {}", t1, t2);
     return vec![t1, t2];
 }
 
@@ -590,7 +573,6 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     view = matrix_multiplication(x_rotation_matrix, view);
     view = matrix_multiplication(y_rotation_matrix, view);
 
-    //println!("{:?}", view);
     return view;
     
 }
@@ -613,6 +595,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
             }
             //let mut shadow_sphere: Option<&Sphere> = None;
             //shadows
+            // ! old shadow implmentation for sharp shadows ( can be used for low render mode to concerve recources when moving)
             /*
             let mut shadow_sphere: Option<&Sphere> = None;
             let mut shadow_t: f64 = f64::INFINITY;
@@ -764,6 +747,7 @@ fn multiply_color_by_float(vec3: &Vec<u8>, multiplier: f64) -> Vec<u8> {
     }
     return product
 }
+
 fn matrix_multiplication(transformation: &Vec<Vec<f64>>, matrix: Vec<f64>) -> Vec<f64> {
     let mut new = vec![0.0,0.0,0.0];
     for i in 0..transformation.len() {
