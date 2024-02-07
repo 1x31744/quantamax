@@ -311,7 +311,7 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..15)
+            let handles: Vec<_> = (0..10)
             .map(|i| {
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
@@ -357,7 +357,7 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
             canvas.present();
 
-            for _ in 0..15{
+            for _ in 0..10{
                 tx.send(Vec::new()).unwrap();
             }
         }
@@ -395,7 +395,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
 
-    let num_of_threads = 15;
+    let num_of_threads = 10;
     let render_width = WIDTH/num_of_threads;
 
 
@@ -415,7 +415,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 3.0, global_illumination, smooth_shadows);
+                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 1.0, global_illumination, smooth_shadows);
                 //println!("{:?}", color);
                 //println!("{:?}", color);
             }
@@ -465,7 +465,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
-    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, &camera_origin, smooth_shadows);
+    let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, smooth_shadows);
     
     let local_color = multiply_color_by_float(&unwraped_sphere.color, light_intensity);
 
@@ -584,10 +584,10 @@ fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distanc
     
 }
 
-fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>, camera_origin: &Vec<f64>, shadow_smoothing: bool) -> f64 {
+fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Light>, to_cam: Vec<f64>, specularity: f64, spheres: &Vec<Sphere>, shadow_smoothing: bool) -> f64 {
     let mut i: f64 = 0.0;
     let mut light_direction: Vec<f64>;
-    let mut t_max = 0.0;
+    let mut t_max: f64;
     for light in light {
         if light.typ == "Ambient" {
             i += light.intensity;
@@ -622,7 +622,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                     if normal_dot_light > 0.0 {
                         //this is true because of trigonometry
                         //cos = distance to cam / normal + light direction
-                        i += ((light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction))))
+                        i += (light.intensity * normal_dot_light)/((vec3_length(&normal) * vec3_length(&light_direction)))
                     }
                     //for specular reflection
                     if specularity != -1.0 {
@@ -635,7 +635,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 }
             }
             else { // ! shadow smoothing implementation
-                let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position, &light_direction, camera_origin, intersection);
+                let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position,  intersection);
                 if light_percent < 1.0 {
                     //println!("{}", light_percent);
                 }
@@ -660,7 +660,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
     }
     return i;
 }
-fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_position: &Vec<f64>, light_direction: &Vec<f64>, camera_origin: &Vec<f64>, intersection: &Vec<f64>)  -> f64{ //u8 is percentage illumination
+fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_position: &Vec<f64>, intersection: &Vec<f64>)  -> f64{ //u8 is percentage illumination
     // ! compute angle from point, light_center and light edge
     let num_of_samples = 100;
     //let mut rng = rand::thread_rng();
@@ -712,12 +712,15 @@ fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_positi
     */
 } 
 
+// ! for safe keeping, from incorect implementaion of shadow smoothing, where we calculate angles
+/* 
 fn cross_product(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
     let cross_x = a[1] * b[2] - a[2] * b[1];
     let cross_y = a[2]*b[0] - a[0]*b[2];
     let cross_z = a[0]*b[1] - a[1] * b[0]; 
     return vec![cross_x, cross_y, cross_z];
 }
+*/
 fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
     let mut product: f64 = 0.0;
     for i in 0..a.len(){
