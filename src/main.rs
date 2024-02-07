@@ -395,7 +395,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
 
-    let num_of_threads = 20;
+    let num_of_threads = 15;
     let render_width = WIDTH/num_of_threads;
 
 
@@ -415,7 +415,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
-                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 5.0, global_illumination, smooth_shadows);
+                color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 3.0, global_illumination, smooth_shadows);
                 //println!("{:?}", color);
                 //println!("{:?}", color);
             }
