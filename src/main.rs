@@ -639,13 +639,7 @@ fn intersect_ray_sphere(camera_origin: &Vec<f64>, view: &Vec<f64>, sphere: &Sphe
     //println!("{}, {}", t1, t2);
     return vec![t1, t2];
 }
-fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
-    let mut product: f64 = 0.0;
-    for i in 0..a.len(){
-        product = product +  (a[i] * b[i]);
-    }
-    return product;
-}
+
 
 fn canvas_to_viewport(x: f64, y: f64, view_width: f64, view_height: f64, distance: f64, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>, y_rotation_matrix: &Vec<Vec<f64>>) -> Vec<f64> {
 
@@ -679,6 +673,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 light_direction = light.direction.clone();
                 t_max = f64::INFINITY
             }
+            let mut shadow_sphere: Option<&Sphere> = None;
             //shadows
             /*
             let mut shadow_sphere: Option<&Sphere> = None;
@@ -719,15 +714,51 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
     }
     return i
 }
-fn compute_shadows_percentage(light: Light, spheres: &Vec<Sphere>, light_position: Vec<f64>, light_direction: Vec<f64>)  -> u8{ //u8 is percentage illumination
-    // ! compute angle from point to light
+fn compute_shadows_percentage(light: Light, spheres: &Vec<Sphere>, light_position: Vec<f64>, light_direction: Vec<f64>, camera_origin: &Vec<f64>)  -> u8{ //u8 is percentage illumination
+    // ! compute angle from point, light_center and light edge
+    let num_of_samples = 20;
+    for _ in 0..num_of_samples {
+        //sample point would be a random point on the circle
+        let sample_point_x 
+    }
+
     let ld_normalized_scale = 1.0/(f64::sqrt(light_direction[0].powi(2) + light_direction[1].powi(2) + light_direction[2].powi(2)));
     let ld_normalized = vec3_multiply_by_float(&light_direction, ld_normalized_scale);
+    let mut purpen_light = cross_product(&ld_normalized, &vec![0.0, 1.0, 0.0]);
+
+    //for when light_direction is directly upwards, as y=1 is used to calculate the purpendicular via cross product
+    if purpen_light[0] == 0.0 && purpen_light[1] == 0.0 && purpen_light[2] == 0.0{
+        purpen_light[1] = 1.0;
+    }
+
+    let to_light_edge = normalize(&vec3_negation(&vec3_addition(&light_position, &vec3_multiply_by_float(&purpen_light, light.radius)), camera_origin));
+    let point_edge_center_angle = f64::acos(dot_product(&ld_normalized, &to_light_edge));
+
+
+
     
 
-    todo!()
+    todo!();
 } 
 
+fn cross_product(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
+    let cross_x = a[1] * b[2] - a[2] * b[1];
+    let cross_y = a[2]*b[0] - a[0]*b[2];
+    let cross_z = a[0]*b[1] - a[1] * b[0]; 
+    return vec![cross_x, cross_y, cross_z];
+}
+fn dot_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
+    let mut product: f64 = 0.0;
+    for i in 0..a.len(){
+        product = product +  (a[i] * b[i]);
+    }
+    return product;
+}
+fn normalize(a: &Vec<f64>) -> Vec<f64> {
+    let normalized_scale = 1.0/(f64::sqrt(a[0].powi(2) + a[1].powi(2) + a[2].powi(2)));
+    let normalized = vec3_multiply_by_float(&a, normalized_scale);
+    return normalized;
+}
 //vector manipulation functions
 fn vec3_addition(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
     let mut product: Vec<f64> = vec![0.0,0.0,0.0];
