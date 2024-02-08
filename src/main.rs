@@ -14,9 +14,7 @@ use std::sync::mpsc::{self, Sender};
 const WIDTH: u32 = 500;
 const HEIGHT: u32 = 500;
 
-//TODO: cannot draw to a canvas when multitherading in sdl2, possibly get a new canvas library and use that to draw pixels to the screen.
-// ! new libraries : piston2d-graphics, rust bindings for SFML
-// ! idea: do a pixel filter that draws 25% of pixels when moving, this will speed up alot for "real time" rendering
+//TODO: implement a function that checks intersects on its own
 
 #[derive(PartialEq, Clone)]
 struct Sphere {
@@ -38,21 +36,24 @@ impl Sphere {
     }
 }
 
+#[derive(PartialEq)]
 struct Light {
     pub typ: String,
     pub intensity: f64,
     pub position: Vec<f64>,
     pub direction: Vec<f64>,
     pub radius: f64,
+    pub sphere: Sphere,
 }
 impl Light {
     pub fn new (intensity: f64, typ: String, position: Vec<f64>, direction: Vec<f64>, radius: f64) -> Light {
         Light {
             intensity: intensity,
             typ: typ,
-            position: position,
+            position: position.clone(),
             direction: direction,
             radius: radius,
+            sphere: Sphere::new(radius, position, vec![225,225,225], 0.0, 0.0)
         }
     }
 }
@@ -366,6 +367,26 @@ pub fn main() {
         }
         //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
+        if global_illumination == true {println!("render finshed, press esc to quit or r to go back into low render mode")}
+        while global_illumination == true {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit {..} |
+                    Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                        break 'running
+                    },
+                    Event::KeyDown {keycode: Some(Keycode::R), ..} => {
+                                render_chance = 200;
+                                global_illumination = false;
+                                smooth_shadows = false;
+                                r_pressed = false;
+
+                        break;
+                    },
+                    _ => {}
+                }
+            }
+        }
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
         //break;
     }
@@ -388,8 +409,8 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
 
     let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 1.0);
     let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 1.0); 
-    let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0], 1.0);
-    let lights: Vec<Light> = vec![light, light2, light3];
+    //let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0], 1.0);
+    let lights: Vec<Light> = vec![light, light2];
 
     let fov: f64 = 180 as f64;
     let view_width = (resolution[0] as f64) * fov;
@@ -446,6 +467,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let mut closest_sphere: Option<&Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
+
     for sphere in spheres{
         intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
         if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
@@ -492,7 +514,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
         //indirect lighting comes after reflectivity? (also recursive)
         let mut rng = rand::thread_rng();
         if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
-            for _ in 0..10 { //num of indirect samples
+            for _ in 0..5 { //num of indirect samples
                 //produce random direction using the unit circle
                 let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
                 let normalized_random_direction = normalize(&random_direction);
@@ -502,7 +524,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
                 }
             }
             //divide indirect by the number of samples
-            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/10.0);
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/5.0);
         }
         else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
     }
@@ -635,11 +657,7 @@ fn compute_lighting(intersection: &Vec<f64>, normal: &Vec<f64>, light: &Vec<Ligh
                 }
             }
             else { // ! shadow smoothing implementation
-                let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position,  intersection);
-                if light_percent < 1.0 {
-                    //println!("{}", light_percent);
-                }
-    
+                let light_percent = 1.0 - compute_shadows_percentage(light, spheres, &light.position,  intersection);    
                 //for diffuse reflection
                 let normal_dot_light = dot_product(&normal, &light_direction);
                 if normal_dot_light > 0.0 {
