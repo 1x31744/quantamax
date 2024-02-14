@@ -60,34 +60,6 @@ impl Light {
     }
 }
 
-/* 
-fn put_pixel(canvas: &mut Canvas<Window>,x: i32, y:i32, color: &Vec<u8>) {
-    let window_width_half: i32 = (WIDTH/2) as i32;
-    let window_height_half: i32 = (HEIGHT/2) as i32;
-    //error handling for draw position out of range
-    if x > window_width_half || x < -window_width_half {
-        println!("invalid x = {}", x);
-        panic!("x co-ordinate outside range")
-    }
-    if y > window_height_half || y < -window_height_half {
-        println!("invalid y = {}", y);
-        panic!("y co-ordinate outside range")
-    }
-    //convert cartesian to computer
-    let canvas_x: i32 = (x + window_width_half) as i32;
-    let canvas_y: i32 = (window_height_half - y) as i32;
-    //draw pixel
-    canvas.set_draw_color(Color::RGB(color[0], color[1], color[2]));
-    let point = Point::new(canvas_x, canvas_y);
-
-    // ! cannot use draw point anymore
-
-    canvas.draw_point(point).expect("could not draw point");
-}
-*/
-// TODO: replace all tuples with lists as tuples are bad practice for same typing
-// TODO: finish dot product function and then finish sphere ray intersection function.
-
 pub fn main() {
 
     let sdl_context = sdl2::init().unwrap();
@@ -99,7 +71,7 @@ pub fn main() {
         .unwrap();
 
     let res_multiplier: u32 = 1; //temp
-    let resolution: Vec<u32> = vec![500, 500]; 
+    let resolution: Vec<u32> = vec![200, 200]; 
     let mut canvas = window.into_canvas().build().unwrap();
     //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -239,38 +211,7 @@ pub fn main() {
             }
         }
 
-        //canvas.set_draw_color(Color::RGB(225, 225, 225));
         canvas.clear();
-        /* 
-        let (render_width, render_height) = canvas.output_size().unwrap();
-        let mut x_as_float: f32;
-        let mut y_as_float: f32;
-        let mut width_as_float: f32;
-        let mut height_as_float: f32;
-        let mut r: f32;
-        let mut g: f32;
-        let mut ir: u8;
-        let mut ig: u8;
-        
-        
-        for y in 0..render_height {
-            for x in 0..render_width {
-                x_as_float = x as f32;
-                y_as_float = y as f32;
-                width_as_float = (render_width - 1) as f32;
-                height_as_float = (render_height - 1) as f32;
-                r = x_as_float / width_as_float;
-                g = y_as_float / height_as_float;
-
-                ir = (225.0 * r).round() as u8;
-                ig = (225.0 * g).round() as u8;
-                //println!("{} {}",ir, ig);
-                canvas.set_draw_color(Color::RGB(ir, ig, 0));
-                let point = Point::new(x.try_into().unwrap(), y.try_into().unwrap());
-                canvas.draw_point(point).expect("could not draw point");
-            }
-        }
-        */
 
         // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
         
@@ -284,30 +225,13 @@ pub fn main() {
                         let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 2.0, global_illumination, smooth_shadows);
                         let canvas_coords = transfer_coords(x, y, window_height_half, window_height_half);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
-                        //println!("{:?}",  canvas_coords);
-                        //println!("{}", pitch);
-                        //println!("{:?}",buffer);
                         buffer[offset] = color[0];
                         buffer[offset + 1] = color[1];
                         buffer[offset + 2] = color[2];
-                        //buffer[offset + 3] = 225;
-                        //println!("made a round")
                    }
                 }
             }).expect("what?"); 
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw to texture");
-
-            /* 
-            for x in -window_width_half..window_width_half {
-                for y in -window_height_half..window_height_half {
-                    let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix);
-                    let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0);
-                    put_pixel(&mut canvas, x, y, &color);                    
-               }
-            }
-            */
-
-            //canvas.draw_points(9);
         }
         if multithreading == true {
             //create channels for communication between threads
@@ -348,13 +272,9 @@ pub fn main() {
                 render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
                     for (x, y, color) in update {
                         let offset = y as usize * pitch as usize + x as usize * 3;
-                        //println!("{:?}",  canvas_coords);
-                        //println!("{}", pitch);
-                        //println!("{:?}",buffer);
                         buffer[offset] = color.0;
                         buffer[offset + 1] = color.1;
                         buffer[offset + 2] = color.2;
-                        //buffer[offset + 3] = 225;
                     }
                 }).expect("why error?");
             }
@@ -380,8 +300,6 @@ pub fn main() {
     
                 let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
                 let path = "output.png";
-                //let file = File::create(path).unwrap();
-                //let mut writer = BufWriter::new(file);
                 img.save(path).unwrap();
             }
 
@@ -395,7 +313,6 @@ pub fn main() {
         if global_illumination {
             println!("render finished")
         }
-        //put_pixel(&mut canvas, 1, 1, vec![225, 0,0]);
         canvas.present();
         if global_illumination == true {println!("render finshed, press esc to quit or r to go back into low render mode")}
         while global_illumination == true {
@@ -437,7 +354,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
 
     let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 1.0);
     let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 1.0); 
-    //let light3 = Light::new(0.2, String::from("Ambient"), vec![0.0,0.0,0.0], vec![0.0,0.0,0.0], 1.0);
     let lights: Vec<Light> = vec![light, light2];
 
     let fov: f64 = 180 as f64;
@@ -449,8 +365,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
 
 
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
-    //width = 500
-    //window_width_half = 250
     let starting_point = -res_width_half + (render_width * (thread_id) as u32) as i32;
 
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
@@ -569,7 +483,8 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     return global_color;
 }
 
-/* 
+// ! may use later, as finding the intersects is used in alot of places in code, using a function for it may be a little better, especially when adding other mediums
+/*  
 fn find_intersects(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: & mut Vec<Sphere>) -> (Option<&mut Sphere>, f64) {
     let mut closest_sphere: Option<& mut Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
@@ -741,19 +656,6 @@ fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_positi
         }
     }
     return successful_samples as f64/num_of_samples as f64; 
-    /* 
-    let ld_normalized_scale = 1.0/(f64::sqrt(light_direction[0].powi(2) + light_direction[1].powi(2) + light_direction[2].powi(2)));
-    let ld_normalized = vec3_multiply_by_float(&light_direction, ld_normalized_scale);
-    let mut purpen_light = cross_product(&ld_normalized, &vec![0.0, 1.0, 0.0]);
-
-    //for when light_direction is directly upwards, as y=1 is used to calculate the purpendicular via cross product
-    if purpen_light[0] == 0.0 && purpen_light[1] == 0.0 && purpen_light[2] == 0.0{
-        purpen_light[1] = 1.0;
-    }
-
-    let to_light_edge = normalize(&vec3_negation(&vec3_addition(&light_position, &vec3_multiply_by_float(&purpen_light, light.radius)), camera_origin));
-    let point_edge_center_angle = f64::acos(dot_product(&ld_normalized, &to_light_edge));
-    */
 } 
 
 // ! for safe keeping, from incorect implementaion of shadow smoothing, where we calculate angles
