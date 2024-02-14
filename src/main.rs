@@ -1,4 +1,6 @@
 extern crate sdl2;
+// Add this import for the image crate
+extern crate image;
 
 use rand::Rng;
 use cond_utils::Between;
@@ -10,6 +12,8 @@ use sdl2::keyboard::Keycode;
 use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
+use std::fs::File;
+use std::io::BufWriter;
 
 const WIDTH: u32 = 400;
 const HEIGHT: u32 = 400;
@@ -97,7 +101,7 @@ pub fn main() {
         .unwrap();
 
     let res_multiplier: u32 = 1; //temp
-    let resolution: Vec<u32> = vec![800, 800]; 
+    let resolution: Vec<u32> = vec![100, 100]; 
     let mut canvas = window.into_canvas().build().unwrap();
     //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -357,6 +361,33 @@ pub fn main() {
                 }).expect("why error?");
             }
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
+
+            // Save the texture as an image
+            if global_illumination {
+                let mut buffer: Vec<u8> = vec![0; ((resolution[0] * resolution[1] * 3)) as usize]; // Assuming RGB format
+                render_texture.with_lock(None, |data, pitch: usize| {
+                    // Populate the buffer with pixel data
+                    for y in 0..resolution[1] {
+                        for x in 0..resolution[0] {
+                            let offset = (y * resolution[0] + x) as usize * 3;
+                            let r = data[y as usize * pitch as usize + x as usize * 3];
+                            let g = data[y as usize * pitch as usize + x as usize * 3 + 1];
+                            let b = data[y as usize * pitch as usize + x as usize * 3 + 2];
+                            buffer[offset] = r;
+                            buffer[offset + 1] = g;
+                            buffer[offset + 2] = b;
+                        }
+                    }
+                }).unwrap();
+    
+                let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
+                let path = "output.png";
+                //let file = File::create(path).unwrap();
+                //let mut writer = BufWriter::new(file);
+                img.save(path).unwrap();
+            }
+
+
             canvas.present();
 
             for _ in 0..10{
