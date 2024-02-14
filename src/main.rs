@@ -12,11 +12,9 @@ use sdl2::keyboard::Keycode;
 use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
-use std::fs::File;
-use std::io::BufWriter;
 
-const WIDTH: u32 = 400;
-const HEIGHT: u32 = 400;
+const WIDTH: u32 = 1000;
+const HEIGHT: u32 = 1000;
 
 //TODO: implement a function that checks intersects on its own
 
@@ -101,7 +99,7 @@ pub fn main() {
         .unwrap();
 
     let res_multiplier: u32 = 1; //temp
-    let resolution: Vec<u32> = vec![100, 100]; 
+    let resolution: Vec<u32> = vec![500, 500]; 
     let mut canvas = window.into_canvas().build().unwrap();
     //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -542,7 +540,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
         //indirect lighting comes after reflectivity? (also recursive)
         let mut rng = rand::thread_rng();
         if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
-            for _ in 0..5 { //num of indirect samples
+            for _ in 0..30 { //num of indirect samples
                 //produce random direction using the unit circle
                 let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
                 let normalized_random_direction = normalize(&random_direction);
@@ -552,7 +550,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
                 }
             }
             //divide indirect by the number of samples
-            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/5.0);
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/30.0);
         }
         else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
     }
