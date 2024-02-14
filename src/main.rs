@@ -55,7 +55,7 @@ impl Light {
             position: position.clone(),
             direction: direction,
             radius: radius,
-            sphere: Sphere::new(radius, position, vec![225,225,225], 0.0, 0.0)
+            sphere: Sphere::new(radius, position, vec![(225.0 * intensity) as u8,(225.0 * intensity) as u8,(225.0 * intensity) as u8], -1.0, 0.0)
         }
     }
 }
@@ -379,8 +379,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             if render_chance < render_chance_max {
                 let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
                 color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 1.0, global_illumination, smooth_shadows);
-                //println!("{:?}", color);
-                //println!("{:?}", color);
             }
             else  {
                 color = vec![0,0,0];
@@ -391,7 +389,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
        }
     }
     tx.send(update).unwrap();
-    //thread::sleep(Duration::from_millis(50));
 
         
 }
@@ -419,14 +416,32 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
             closest_sphere = Some(sphere)
         }
     }
+    
+    //do the same but for light sources
+    for light in lights {
+        intersects = intersect_ray_sphere(&camera_origin, &view, &light.sphere);
+        if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
+            closest_t = intersects[0];
+            closest_sphere = Some(&light.sphere);
+        }
+        if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
+            closest_t = intersects[1];
+            closest_sphere = Some(&light.sphere)
+        }
+    }
+
     if closest_sphere == None {
         return vec![0, 0, 0]
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
+
+    //--values for light intensity calculation--
     let unwraped_sphere = closest_sphere.unwrap();
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
+    //--values for light intensity calculation--
+
     let light_intensity = compute_lighting(&intersection, &normal, lights, vec3_multiply_by_float(&view, -1.0), unwraped_sphere.specularity, spheres, smooth_shadows);
     
     let local_color = multiply_color_by_float(&unwraped_sphere.color, light_intensity);
