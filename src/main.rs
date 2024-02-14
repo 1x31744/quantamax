@@ -11,8 +11,8 @@ use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
 
-const WIDTH: u32 = 500;
-const HEIGHT: u32 = 500;
+const WIDTH: u32 = 400;
+const HEIGHT: u32 = 400;
 
 //TODO: implement a function that checks intersects on its own
 
@@ -96,17 +96,17 @@ pub fn main() {
         .build()
         .unwrap();
 
-    let res_multiplier: u32 = 1;
-    let resolution: Vec<u32> = vec![WIDTH * res_multiplier, HEIGHT * res_multiplier]; 
+    let res_multiplier: u32 = 1; //temp
+    let resolution: Vec<u32> = vec![800, 800]; 
     let mut canvas = window.into_canvas().build().unwrap();
-    canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
+    //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
     let texture_creator = canvas.texture_creator();
-    let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,WIDTH + 1, HEIGHT + 1).map_err(|e| e.to_string()).unwrap();
+    let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
     //let mut surface = window.surface(&event_pump);
 
-    let window_width_half: i32 = (WIDTH/2) as i32;
-    let window_height_half: i32 = (HEIGHT/2) as i32;
+    let window_width_half: i32 = (resolution[0]/2) as i32;
+    let window_height_half: i32 = (resolution[1]/2) as i32;
     let sphere1 = Sphere::new(1.0, vec![0.0,-1.5, 1.5], vec![225,0,0] , -1.0, 0.5);
     let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![255,192,203], 500.0, 0.5);
     let sphere3 = Sphere::new(1.0, vec![1.5,-0.5, 1.7], vec![0,0,225], 500.0, 0.5);
@@ -280,7 +280,7 @@ pub fn main() {
                     for y in -window_height_half..window_height_half {
                         let view = canvas_to_viewport(x as f64, y as f64, view_width, view_height as f64, 1.0, &z_rotation_matrix, &x_rotation_matrix, &y_rotation_matrix);
                         let color = trace_ray(&camera_position, view, 0.0, f64::INFINITY, &lights, &spheres, 3.0, 2.0, global_illumination, smooth_shadows);
-                        let canvas_coords = transfer_coords(x, y);      
+                        let canvas_coords = transfer_coords(x, y, window_height_half, window_height_half);      
                         let offset = canvas_coords.1 as usize * pitch as usize + canvas_coords.0 as usize * 3;
                         //println!("{:?}",  canvas_coords);
                         //println!("{}", pitch);
@@ -322,9 +322,10 @@ pub fn main() {
                 let y_rotation_matrix = y_rotation_matrix.clone();
                 let global_illumination = global_illumination.clone();
                 let smooth_shadows = global_illumination.clone();
+                let res = resolution.clone();
                 thread::spawn(move || {
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res);
                 })
             }).collect();
 
@@ -393,14 +394,12 @@ pub fn main() {
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut Vec<f64>, z_rotation_matrix: &Vec<Vec<f64>>, x_rotation_matrix: &Vec<Vec<f64>>
-, y_rotation_matrix: &Vec<Vec<f64>>, global_illumination: bool, smooth_shadows: bool){
+, y_rotation_matrix: &Vec<Vec<f64>>, global_illumination: bool, smooth_shadows: bool, resolution: Vec<u32>){
     // --temp--
     //define variables
-    let res_multiplier: u32 = 1;
-    let resolution: Vec<u32> = vec![WIDTH * res_multiplier, HEIGHT * res_multiplier]; 
 
-    let window_width_half: i32 = (WIDTH/2) as i32;
-    let window_height_half: i32 = (HEIGHT/2) as i32;
+    let res_width_half: i32 = (resolution[0]/2) as i32;
+    let res_height_half: i32 = (resolution[1]/2) as i32;
     let sphere1 = Sphere::new(1.0, vec![0.0,-1.5, 1.5], vec![225,0,0] , -1.0, 0.5);
     let sphere2 = Sphere::new(1.0, vec![-1.5,-0.5,1.7], vec![255,192,203], 500.0, 0.5);
     let sphere3 = Sphere::new(1.0, vec![1.5,-0.5, 1.7], vec![0,0,225], 500.0, 0.5);
@@ -417,21 +416,21 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let view_height = (resolution[1] as f64) * fov;
 
     let num_of_threads = 10;
-    let render_width = WIDTH/num_of_threads;
+    let render_width = resolution[0]/num_of_threads; //width/numofthreads
 
 
     let mut update: Vec<(u32, u32, (u8, u8, u8))> = Vec::new();
     //width = 500
     //window_width_half = 250
-    let starting_point = -window_width_half + (render_width * (thread_id) as u32) as i32;
+    let starting_point = -res_width_half + (render_width * (thread_id) as u32) as i32;
 
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
-    let end_point = window_width_half - (render_width * (max_negate_id) as u32) as i32;
+    let end_point = res_width_half - (render_width * (max_negate_id) as u32) as i32;
 
     
     let mut rng = rand::thread_rng();
     for x in starting_point..end_point {
-        for y in -window_height_half..window_height_half {
+        for y in -res_height_half..res_height_half {
             let color: Vec<u8>;
             let render_chance = rng.gen_range(0..1000);
             if render_chance < render_chance_max {
@@ -443,7 +442,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             else  {
                 color = vec![0,0,0];
             }
-            let canvas_coords = transfer_coords(x, y);
+            let canvas_coords = transfer_coords(x, y, res_width_half, res_height_half);
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
        }
@@ -454,11 +453,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
         
 }
 
-fn transfer_coords(x: i32, y: i32) -> (i32, i32) {
-    let window_width_half: i32 = (WIDTH/2) as i32;
-    let window_height_half: i32 = (HEIGHT/2) as i32;
-    let canvas_x: i32 = (x + window_width_half) as i32;
-    let canvas_y: i32 = (window_height_half - y) as i32;
+fn transfer_coords(x: i32, y: i32, res_width_half: i32, res_height_half: i32) -> (i32, i32) {
+    let canvas_x: i32 = (x + res_width_half) as i32;
+    let canvas_y: i32 = (res_height_half - y) as i32;
     return (canvas_x, canvas_y)
 }
 
