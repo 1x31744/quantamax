@@ -352,8 +352,8 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let shere5 = Sphere::new(5000.0, vec![0.0,-5001.0,0.0], vec![225,225,0], -1.0, 0.2);
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
-    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 1.0);
-    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 1.0); 
+    let light = Light::new(0.7, String::from("Point"), vec![-5.0,1.0,0.0], vec![0.0,0.0,0.0], 0.5);
+    let light2 = Light::new(0.7, String::from("Point"), vec![5.0,1.0,0.0], vec![-1.0, -9.0, -2.0], 0.5); 
     let lights: Vec<Light> = vec![light, light2];
 
     let fov: f64 = 180 as f64;
@@ -404,16 +404,19 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let mut closest_sphere: Option<&Sphere> = None;
     let mut closest_t: f64 = f64::INFINITY;
     let mut intersects: Vec<f64>;
+    let mut is_light_source: bool = false;
 
     for sphere in spheres{
         intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
         if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
             closest_t = intersects[0];
             closest_sphere = Some(sphere);
+            is_light_source = false;
         }
         if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
             closest_t = intersects[1];
-            closest_sphere = Some(sphere)
+            closest_sphere = Some(sphere);
+            is_light_source = false;
         }
     }
     
@@ -423,10 +426,12 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
         if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
             closest_t = intersects[0];
             closest_sphere = Some(&light.sphere);
+            is_light_source = true;
         }
         if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
             closest_t = intersects[1];
-            closest_sphere = Some(&light.sphere)
+            closest_sphere = Some(&light.sphere);
+            is_light_source = true;
         }
     }
 
@@ -435,8 +440,13 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     }
     //assert_eq!(intersects,vec![0.0, 0.0]);
 
-    //--values for light intensity calculation--
     let unwraped_sphere = closest_sphere.unwrap();
+
+    if is_light_source {
+        return unwraped_sphere.color.clone();
+    }
+
+    //--values for light intensity calculation--
     let intersection: Vec<f64> = vec3_addition(&camera_origin, &vec3_multiply_by_float(&view, closest_t));
     let mut normal = vec3_negation(&intersection, &unwraped_sphere.center);
     normal = vec3_divide_by_float(&normal, vec3_length(&normal));
