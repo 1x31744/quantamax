@@ -71,7 +71,7 @@ pub fn main() {
         .unwrap();
 
     let res_multiplier: u32 = 1; //temp
-    let resolution: Vec<u32> = vec![200, 200]; 
+    let mut resolution: Vec<u32> = vec![200, 200]; 
     let mut canvas = window.into_canvas().build().unwrap();
     //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -134,6 +134,8 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
+                            resolution = vec![800,800];
+                            render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
                             smooth_shadows = true;
@@ -477,9 +479,10 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
     let mut indirect_lighting: Vec<u8> = vec![0,0,0];
     if global_illumination == true {
         //indirect lighting comes after reflectivity? (also recursive)
+        let num_of_samples = 40.0;
         let mut rng = rand::thread_rng();
         if recursion_depth_indirect > 0.0 { //use indirect's own recursion depth
-            for _ in 0..30 { //num of indirect samples
+            for _ in 0..num_of_samples as u32 { //num of indirect samples
                 //produce random direction using the unit circle
                 let random_direction = vec![rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0, rng.gen::<f64>() * 2.0 - 1.0];
                 let normalized_random_direction = normalize(&random_direction);
@@ -489,7 +492,7 @@ fn trace_ray(camera_origin: &Vec<f64>, view: Vec<f64>, tmin: f64, tmax: f64, lig
                 }
             }
             //divide indirect by the number of samples
-            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/30.0);
+            indirect_lighting = multiply_color_by_float(&indirect_lighting, 1.0/num_of_samples);
         }
         else if recursion_depth_indirect < 0.0 {return indirect_lighting;}
     }
