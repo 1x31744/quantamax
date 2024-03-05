@@ -6,7 +6,14 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use rand::Rng;
 use cond_utils::Between;
+use sdl2::pixels;
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::render;
+use sdl2::render::Canvas;
+use sdl2::render::TextureAccess;
+use sdl2::render::TextureCreator;
+use sdl2::video::WindowContext;
+use std::clone;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -16,11 +23,13 @@ use sdl2::keyboard::Keycode;
 use std::time::Duration;
 use sdl2::rect::Rect;
 use std::sync::mpsc::{self, Sender};
+use sdl2::render::Texture;
 
 const WIDTH: u32 = 1000;
 const HEIGHT: u32 = 1000;
 const UPDATE_FREQUENCY: u64 = 10000; // Update progress bar every 100 iterations
-//TODO: implement a function that checks intersects on its own
+//TODO: implement a function that checks intersects on its own as this is done multiple times in the code
+//TODO: make easy setting between certain features, like shadow_smoothing, global_illumination, right now shadow smoothing depends on global illumnation
 #[derive(PartialEq, Clone)]
 struct Sphere {
     pub radius: f64,
@@ -137,7 +146,7 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
-                            resolution = [800,800];
+                            resolution = [300,300];
                             render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
@@ -265,7 +274,7 @@ pub fn main() {
                 let smooth_shadows = global_illumination.clone();
                 let res = resolution.clone();
                 thread::spawn(move || {
-                    let mut pb_unwrap: std::sync::MutexGuard<'_, ProgressBar> = pb_clone.lock().unwrap();
+                    let pb_unwrap: std::sync::MutexGuard<'_, ProgressBar> = pb_clone.lock().unwrap();
                     let mut counter: std::sync::MutexGuard<'_, i32> = counter.lock().unwrap();
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
                     &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, &mut *counter, pb_unwrap);
@@ -294,8 +303,7 @@ pub fn main() {
                         buffer[offset + 2] = color.2;
                     }
                 }).expect("why error?");
-            }
-            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");   
+            } 
 
             // Save the texture as an image
             if global_illumination {
@@ -320,6 +328,15 @@ pub fn main() {
                 img.save(path).unwrap();
             }
 
+            let mut modified_render_texture: Texture<'_>  = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
+
+            render_texture.with_lock(None, |pixels, pitch| {
+                modified_render_texture.update(None, pixels, pitch).expect("could not copy section");
+            }).expect("could not copy section");
+
+            modified_render_texture = apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture).unwrap();
+
+            canvas.copy(&modified_render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
 
             canvas.present();
 
@@ -330,7 +347,6 @@ pub fn main() {
         if global_illumination {
             println!("render finished")
         }
-        canvas.present();
         if global_illumination == true {println!("render finshed, press esc to quit or r to go back into low render mode")}
         while global_illumination == true {
             for event in event_pump.poll_iter() {
@@ -354,6 +370,101 @@ pub fn main() {
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
         //break;
     }
+}
+
+fn apply_fxaa<'a>(
+    texture_creator: &'a TextureCreator<WindowContext>,
+    canvas: &mut Canvas<sdl2::video::Window>,
+    texture: &mut Texture<'a>,
+) -> Result<Texture<'a>, String> {
+    // Extract the pixel data from the texture
+    let query = texture.query();
+    let (width, height) = (query.width as usize, query.height as usize);
+    let mut pixels: Vec<u8> = vec![0; ((width * height * 3)) as usize];
+    
+    texture.with_lock(None, |data, pitch: usize| {
+        // Populate the buffer with pixel data
+        for y in 0..height {
+            for x in 0..width {
+                let offset = (y * height + x) as usize * 3;
+                let r = data[y as usize * pitch as usize + x as usize * 3];
+                let g = data[y as usize * pitch as usize + x as usize * 3 + 1];
+                let b = data[y as usize * pitch as usize + x as usize * 3 + 2];
+                pixels[offset] = r;
+                pixels[offset + 1] = g;
+                pixels[offset + 2] = b;
+            }
+        }
+    }).unwrap();
+
+    // Apply FXAA
+    pixels = fxaa(&mut pixels, width, height);
+
+    // Update the texture with the modified pixels
+
+    texture.update(None, &pixels, (width * 3) as usize).map_err(|e| e.to_string()).expect("hmm these are some pretty good error");
+
+    // Return Ok to indicate success
+    let mut cloned_texture: Texture<'_>  = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,width.try_into().unwrap() , height.try_into().unwrap()).map_err(|e| e.to_string()).unwrap();
+    texture.with_lock(None, |pixels, pitch| {
+        cloned_texture.update(None, pixels, pitch).expect("could not copy section");
+    }).expect("could not copy section");
+    Ok(cloned_texture)
+    /* 
+    let modified_texture = texture_creator.create_texture_target(sdl2::pixels::PixelFormatEnum::RGBA8888, query.width, query.height)?;
+    canvas.with_texture_canvas(&mut modified_texture, |texture_canvas| {
+        texture_canvas.copy(texture, None, None)?;
+        texture_canvas.copy(&sdl2::surface::Surface::from_data(&mut pixels, width as u32, height as u32, 32, width * 4)?, None, None)?;
+    })?;
+
+    Ok(modified_texture)
+    */
+}
+fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize) -> Vec<u8> {
+    let mut luma_current;
+    let mut luma_down: f32;
+    let mut luma_right;
+
+    for y in 0..height {
+        for x in 0..width {
+            let idx = (y * height + x) as usize * 3; // RGB24 format
+
+            // Calculate luminance for the current pixel and its neighbors
+            luma_current = 0.299 * pixels[idx] as f32 + 0.587 * pixels[idx + 1] as f32 + 0.114 * pixels[idx + 2] as f32;
+            if x > 0 {
+                luma_right = 0.299 * pixels[idx - 3] as f32 + 0.587 * pixels[idx - 2] as f32 + 0.114 * pixels[idx - 1] as f32;
+            } else {
+                luma_right = luma_current;
+            }
+            if y > 0 {
+                luma_down = 0.299 * pixels[idx - width * 3] as f32 + 0.587 * pixels[idx - width * 3 + 1] as f32 + 0.114 * pixels[idx - width * 3 + 2] as f32;
+            } else {
+                luma_down = luma_current;
+            }
+
+            //println!("Current pixel: ({}, {})", x, y);
+            //println!("Luminance current: {}", luma_current);
+            //println!("Luminance down: {}", luma_down);
+            //println!("Luminance right: {}", luma_right);
+    
+
+            // Calculate contrast between the current pixel and its neighbors
+            let contrast_down = (luma_current - luma_down).abs();
+            let contrast_right = (luma_current - luma_right).abs();
+            //println!("contrast down is: {}", contrast_down);
+            //println!("contrast right is: {}", contrast_right);
+            
+            // Apply FXAA if the contrast is high
+            if contrast_down + contrast_right >= 0.001 {
+                // Apply a simple blur filter to the pixel
+                println!("this code does not run");
+                for i in 0..3 {
+                    pixels[idx + i] = (pixels[idx - width * 3 + i] + pixels[idx + i] + pixels[idx + 3 + i]) / 3;
+                }
+            }
+        }
+    }
+    return pixels.to_vec()
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut [f64; 3], z_rotation_matrix: &[[f64; 3]; 3], x_rotation_matrix: &[[f64; 3]; 3]
