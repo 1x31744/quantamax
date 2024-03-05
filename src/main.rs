@@ -2,9 +2,13 @@ extern crate sdl2;
 // Add this import for the image crate
 extern crate image;
 
+use indicatif::{ProgressBar, ProgressStyle};
+
 use rand::Rng;
 use cond_utils::Between;
 use sdl2::pixels::PixelFormatEnum;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
@@ -15,7 +19,7 @@ use std::sync::mpsc::{self, Sender};
 
 const WIDTH: u32 = 1000;
 const HEIGHT: u32 = 1000;
-
+const UPDATE_FREQUENCY: u64 = 10000; // Update progress bar every 100 iterations
 //TODO: implement a function that checks intersects on its own
 #[derive(PartialEq, Clone)]
 struct Sphere {
@@ -133,7 +137,7 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
-                            resolution = [1500,1500];
+                            resolution = [800,800];
                             render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
@@ -238,9 +242,19 @@ pub fn main() {
             //create channels for communication between threads
             let (tx, rx) = mpsc::channel();
 
+            // Create a shared integer variable wrapped in Arc and Mutex
+            let shared_counter = Arc::new(Mutex::new(0));
+            let pb = Arc::new(Mutex::new(ProgressBar::new((resolution[0] * resolution[1]) as u64)));
+            pb.lock().unwrap().set_style(ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40.red/pink} {pos}/{len} {msg}")
+            .progress_chars("#>-"));
+
             //spawn multiple threads to update different sections of the texture
             let handles: Vec<_> = (0..10)
             .map(|i| {
+                let counter = Arc::clone(&shared_counter);
+                let pb_clone = Arc::clone(&pb);
+
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
                 let mut camera_position = camera_position.clone();
@@ -251,8 +265,10 @@ pub fn main() {
                 let smooth_shadows = global_illumination.clone();
                 let res = resolution.clone();
                 thread::spawn(move || {
+                    let mut pb_unwrap: std::sync::MutexGuard<'_, ProgressBar> = pb_clone.lock().unwrap();
+                    let mut counter: std::sync::MutexGuard<'_, i32> = counter.lock().unwrap();
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, &mut *counter, pb_unwrap);
                 })
             }).collect();
 
@@ -341,7 +357,7 @@ pub fn main() {
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut [f64; 3], z_rotation_matrix: &[[f64; 3]; 3], x_rotation_matrix: &[[f64; 3]; 3]
-, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2]){
+, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2], percent_counter: &mut i32, pb :std::sync::MutexGuard<'_, ProgressBar>){
     // --temp--
     //define variables
 
@@ -385,6 +401,10 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
                 color = [0,0,0];
             }
             let canvas_coords = transfer_coords(x, y, res_width_half, res_height_half);
+            *percent_counter += 1;
+            if (*percent_counter as u64 % UPDATE_FREQUENCY == 0 || *percent_counter == 1) && global_illumination{
+                pb.set_position(*percent_counter as u64);
+            }
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
        }
