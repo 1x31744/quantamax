@@ -246,7 +246,7 @@ pub fn main() {
             let shared_counter = Arc::new(Mutex::new(0));
             let pb = Arc::new(Mutex::new(ProgressBar::new((resolution[0] * resolution[1]) as u64)));
             pb.lock().unwrap().set_style(ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.red/pink} {pos}/{len} {msg}")
+            .template("[{elapsed_precise}] {bar:40.red/pink} {percent}% {pos}/{len} {msg}")
             .progress_chars("#>-"));
 
             //spawn multiple threads to update different sections of the texture
