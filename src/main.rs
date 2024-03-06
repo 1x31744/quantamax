@@ -4,6 +4,7 @@ extern crate image;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
+use std::sync::atomic::Ordering;
 use rand::Rng;
 use cond_utils::Between;
 use sdl2::pixels;
@@ -12,10 +13,12 @@ use sdl2::render;
 use sdl2::render::Canvas;
 use sdl2::render::TextureAccess;
 use sdl2::render::TextureCreator;
+use sdl2::sys::Atom;
 use sdl2::video::WindowContext;
 use std::clone;
 use std::io::BufRead;
 use std::num;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -254,18 +257,18 @@ pub fn main() {
             let (tx, rx) = mpsc::channel();
 
             // Create a shared integer variable wrapped in Arc and Mutex
-            let shared_counter = Arc::new(Mutex::new(0));
-            let pb = Arc::new(Mutex::new(ProgressBar::new((resolution[0] * resolution[1]) as u64)));
-            pb.lock().unwrap().set_style(ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.red/pink} {percent}% {pos}/{len} {msg}")
-            .progress_chars("#>-"));
+            let counter = Arc::new(AtomicUsize::new(0));
+            //let pb = Arc::new(Mutex::new(ProgressBar::new((resolution[0] * resolution[1]) as u64)));
+            //pb.lock().unwrap().set_style(ProgressStyle::default_bar()
+            //.template("[{elapsed_precise}] {bar:40.red/pink} {percent}% {pos}/{len} {msg}")
+            //.progress_chars("#>-"));
 
             //spawn multiple threads to update different sections of the texture
-            let num_of_threads = 1000;
+            let num_of_threads = 10;
             let handles: Vec<_> = (0..num_of_threads)
             .map(|i| {
-                let counter = Arc::clone(&shared_counter);
-                let pb_clone = Arc::clone(&pb);
+                let counter_clone = Arc::clone(&counter);
+                //let pb_clone = Arc::clone(&pb);
 
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
@@ -278,10 +281,8 @@ pub fn main() {
                 let res = resolution.clone();
                 let thread_num = num_of_threads.clone();
                 thread::spawn(move || {
-                    let pb_unwrap: std::sync::MutexGuard<'_, ProgressBar> = pb_clone.lock().unwrap();
-                    let mut counter: std::sync::MutexGuard<'_, i32> = counter.lock().unwrap();
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, &mut *counter, pb_unwrap, thread_num);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, counter_clone, thread_num);
                 })
             }).collect();
 
@@ -466,7 +467,7 @@ fn fxaa(pixels: &Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8>
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut [f64; 3], z_rotation_matrix: &[[f64; 3]; 3], x_rotation_matrix: &[[f64; 3]; 3]
-, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2], percent_counter: &mut i32, pb :std::sync::MutexGuard<'_, ProgressBar>, num_of_threads: usize){
+, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2], percent_counter: Arc<AtomicUsize>, num_of_threads: usize){
     // --temp--
     //define variables
 
@@ -497,6 +498,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let end_point = res_width_half - (render_width * (max_negate_id) as u32) as i32;
 
     
+    let max_pixels = resolution[0] * resolution[1];
     let mut rng = rand::thread_rng();
     for x in starting_point..end_point {
         for y in -res_height_half..res_height_half {
@@ -510,9 +512,10 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
                 color = [0,0,0];
             }
             let canvas_coords = transfer_coords(x, y, res_width_half, res_height_half);
-            *percent_counter += 1;
-            if (*percent_counter as u64 % UPDATE_FREQUENCY == 0 || *percent_counter == 1) && global_illumination{
-                pb.set_position(*percent_counter as u64);
+            percent_counter.fetch_add(1, Ordering::SeqCst); // add 1
+            let value = percent_counter.load(Ordering::SeqCst);
+            if (value as u64 % UPDATE_FREQUENCY == 0 || value == 1) && global_illumination{
+                println!("{}%", (value as f32/max_pixels as f32) * 100.0);
             }
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
