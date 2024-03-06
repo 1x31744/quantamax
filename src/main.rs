@@ -14,6 +14,7 @@ use sdl2::render::TextureAccess;
 use sdl2::render::TextureCreator;
 use sdl2::video::WindowContext;
 use std::clone;
+use std::io::BufRead;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -227,7 +228,7 @@ pub fn main() {
 
         canvas.clear();
 
-        // ! a pixel buffer can be an array of u8's, in order R, G, B, ALPHA. first 4 are (0,0)
+        // ! a pixel buffer can be an array of u8's, in order R, G, B. first 3 are (0,0)
         
 
         let multithreading = true;
@@ -305,9 +306,11 @@ pub fn main() {
                 }).expect("why error?");
             } 
 
-            // Save the texture as an image
+            // Save the texture as an image and apply fxxa
             if global_illumination {
+                // ! apply fxxa first
                 let mut buffer: Vec<u8> = vec![0; ((resolution[0] * resolution[1] * 3)) as usize]; // Assuming RGB format
+                let mut pixel_pitch: usize = 0;
                 render_texture.with_lock(None, |data, pitch: usize| {
                     // Populate the buffer with pixel data
                     for y in 0..resolution[1] {
@@ -321,23 +324,23 @@ pub fn main() {
                             buffer[offset + 2] = b;
                         }
                     }
+                    pixel_pitch = pitch;
                 }).unwrap();
-    
+                let mut modified_render_texture: Texture<'_>  = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
+
+                render_texture.with_lock(None, |pixels, pitch| {
+                    modified_render_texture.update(None, pixels, pitch).expect("could not copy section");
+                }).expect("could not copy section");
+
+                apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture, &mut buffer, &pixel_pitch);
+
+                // ! make image
                 let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
                 let path = "output.png";
                 img.save(path).unwrap();
             }
 
-            let mut modified_render_texture: Texture<'_>  = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
-
-            render_texture.with_lock(None, |pixels, pitch| {
-                modified_render_texture.update(None, pixels, pitch).expect("could not copy section");
-            }).expect("could not copy section");
-
-            modified_render_texture = apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture).unwrap();
-
-            canvas.copy(&modified_render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
-
+            canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
             canvas.present();
 
             for _ in 0..10{
@@ -376,68 +379,42 @@ fn apply_fxaa<'a>(
     texture_creator: &'a TextureCreator<WindowContext>,
     canvas: &mut Canvas<sdl2::video::Window>,
     texture: &mut Texture<'a>,
-) -> Result<Texture<'a>, String> {
+    buffer: &mut Vec<u8>,
+    pitch: &usize
+){
     // Extract the pixel data from the texture
     let query = texture.query();
     let (width, height) = (query.width as usize, query.height as usize);
     let mut pixels: Vec<u8> = vec![0; ((width * height * 3)) as usize];
-    
-    texture.with_lock(None, |data, pitch: usize| {
-        // Populate the buffer with pixel data
-        for y in 0..height {
-            for x in 0..width {
-                let offset = (y * height + x) as usize * 3;
-                let r = data[y as usize * pitch as usize + x as usize * 3];
-                let g = data[y as usize * pitch as usize + x as usize * 3 + 1];
-                let b = data[y as usize * pitch as usize + x as usize * 3 + 2];
-                pixels[offset] = r;
-                pixels[offset + 1] = g;
-                pixels[offset + 2] = b;
-            }
-        }
-    }).unwrap();
 
     // Apply FXAA
-    pixels = fxaa(&mut pixels, width, height);
+    pixels = fxaa(buffer, width, height, pitch);
 
     // Update the texture with the modified pixels
 
-    texture.update(None, &pixels, (width * 3) as usize).map_err(|e| e.to_string()).expect("hmm these are some pretty good error");
+    //texture.update(None, &pixels, (width * 3) as usize * 3 as usize).map_err(|e| e.to_string()).expect("hmm these are some pretty good error");
+    //canvas.copy(texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
 
-    // Return Ok to indicate success
-    let mut cloned_texture: Texture<'_>  = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,width.try_into().unwrap() , height.try_into().unwrap()).map_err(|e| e.to_string()).unwrap();
-    texture.with_lock(None, |pixels, pitch| {
-        cloned_texture.update(None, pixels, pitch).expect("could not copy section");
-    }).expect("could not copy section");
-    Ok(cloned_texture)
-    /* 
-    let modified_texture = texture_creator.create_texture_target(sdl2::pixels::PixelFormatEnum::RGBA8888, query.width, query.height)?;
-    canvas.with_texture_canvas(&mut modified_texture, |texture_canvas| {
-        texture_canvas.copy(texture, None, None)?;
-        texture_canvas.copy(&sdl2::surface::Surface::from_data(&mut pixels, width as u32, height as u32, 32, width * 4)?, None, None)?;
-    })?;
-
-    Ok(modified_texture)
-    */
 }
-fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize) -> Vec<u8> {
+fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8> {
     let mut luma_current;
     let mut luma_down: f32;
     let mut luma_right;
 
-    for y in 0..height {
-        for x in 0..width {
-            let idx = (y * height + x) as usize * 3; // RGB24 format
+    for y in 0..(height-5) {
+        for x in 0..(width-6) {
+            let offset = (y * width + x) as usize * 3; // RGB24 format
+            let down_offset = ((y + 1) * width + x) as usize * 3;
 
             // Calculate luminance for the current pixel and its neighbors
-            luma_current = 0.299 * pixels[idx] as f32 + 0.587 * pixels[idx + 1] as f32 + 0.114 * pixels[idx + 2] as f32;
+            luma_current = 0.299 * pixels[offset] as f32 + 0.587 * pixels[offset + 1] as f32 + 0.114 * pixels[offset+2] as f32;
             if x > 0 {
-                luma_right = 0.299 * pixels[idx - 3] as f32 + 0.587 * pixels[idx - 2] as f32 + 0.114 * pixels[idx - 1] as f32;
+                luma_right = 0.299 * 0.299 * pixels[offset + 3] as f32 + 0.587 * pixels[offset + 4] as f32 + 0.114 * pixels[offset + 5] as f32;
             } else {
                 luma_right = luma_current;
             }
             if y > 0 {
-                luma_down = 0.299 * pixels[idx - width * 3] as f32 + 0.587 * pixels[idx - width * 3 + 1] as f32 + 0.114 * pixels[idx - width * 3 + 2] as f32;
+                luma_down = 0.299 * 0.299 * pixels[down_offset] as f32 + 0.587 * pixels[down_offset + 1] as f32 + 0.114 * pixels[down_offset + 2] as f32;
             } else {
                 luma_down = luma_current;
             }
@@ -449,17 +426,27 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize) -> Vec<u8> {
     
 
             // Calculate contrast between the current pixel and its neighbors
+            //println!("{}, {}", luma_current, luma_right);
             let contrast_down = (luma_current - luma_down).abs();
             let contrast_right = (luma_current - luma_right).abs();
             //println!("contrast down is: {}", contrast_down);
             //println!("contrast right is: {}", contrast_right);
+            //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
-            if contrast_down + contrast_right >= 0.001 {
-                // Apply a simple blur filter to the pixel
-                println!("this code does not run");
+            if contrast_right >= 30.0 || contrast_down >= 30.0 {
+                // Apply a simple blur filter to the pixel;
                 for i in 0..3 {
-                    pixels[idx + i] = (pixels[idx - width * 3 + i] + pixels[idx + i] + pixels[idx + 3 + i]) / 3;
+                    let neighbor_pixel_right = if x < width - 1 {
+                        pixels[offset + 3 + i]
+                    } else {
+                        pixels[offset + i] // Use current pixel if at right edge
+                    };
+
+                    let neighbor_pixel_down = pixels[down_offset + i];
+
+                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_right + neighbor_pixel_down) / 3;
+                    print!("this happens")
                 }
             }
         }
@@ -594,9 +581,6 @@ fn trace_ray(camera_origin: &[f64; 3], view: [f64; 3], tmin: f64, tmax: f64, lig
     if recursion_depth_reflection < 0.0 || reflectivity == 0.0 {
         return local_color
     }
-    
-
-
 
     //pythagoras
     let opposite_ray = vec3_multiply_by_float(&view, -1.0);
