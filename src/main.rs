@@ -401,7 +401,7 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
     let mut luma_down: f32;
     let mut luma_right;
 
-    for y in 0..(height-5) {
+    for y in 0..(height-3) {
         for x in 0..(width-6) {
             let offset = (y * width + x) as usize * 3; // RGB24 format
             let down_offset = ((y + 1) * width + x) as usize * 3;
@@ -409,12 +409,12 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
             // Calculate luminance for the current pixel and its neighbors
             luma_current = 0.299 * pixels[offset] as f32 + 0.587 * pixels[offset + 1] as f32 + 0.114 * pixels[offset+2] as f32;
             if x > 0 {
-                luma_right = 0.299 * 0.299 * pixels[offset + 3] as f32 + 0.587 * pixels[offset + 4] as f32 + 0.114 * pixels[offset + 5] as f32;
+                luma_right = 0.299 * pixels[offset + 3] as f32 + 0.587 * pixels[offset + 4] as f32 + 0.114 * pixels[offset + 5] as f32;
             } else {
                 luma_right = luma_current;
             }
             if y > 0 {
-                luma_down = 0.299 * 0.299 * pixels[down_offset] as f32 + 0.587 * pixels[down_offset + 1] as f32 + 0.114 * pixels[down_offset + 2] as f32;
+                luma_down = 0.299 * pixels[down_offset] as f32 + 0.587 * pixels[down_offset + 1] as f32 + 0.114 * pixels[down_offset + 2] as f32;
             } else {
                 luma_down = luma_current;
             }
@@ -434,20 +434,27 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
             //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
-            if contrast_right >= 45.0 || contrast_down >= 45.0 { // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
+            if contrast_right >= 40.0 { // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
                 // Apply a simple blur filter to the pixel;
                 for i in 0..3 {
-                    let neighbor_pixel_right = if x < width - 1 {
-                        pixels[offset + 3 + i]
-                    } else {
-                        pixels[offset + i] // Use current pixel if at right edge
-                    };
-
-                    let neighbor_pixel_down = pixels[down_offset + i];
-
-                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_right + neighbor_pixel_down) / 3;
-                    print!("this happens")
+                    let neighbor_pixel_right = pixels[offset + 3 + i];
+                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_right) / 2;
+                    if pixels[offset+i] > 255 {
+                        println!("right max")
+                    }
                 }
+            }
+            else if contrast_down >= 40.0 {
+                for i in 0..3 {
+                    let neighbor_pixel_down = pixels[down_offset + i];
+                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_down) / 2;
+                    if pixels[offset+i] > 255 {
+                        println!("down max")
+                    }
+                }
+
+            // ! i think the issue might be that changes in the average color are effecting right and below calculations, therefore the we change should be different
+            // ! from the one we analyse
             }
         }
     }
