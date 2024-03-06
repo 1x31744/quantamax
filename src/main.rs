@@ -15,6 +15,7 @@ use sdl2::render::TextureCreator;
 use sdl2::video::WindowContext;
 use std::clone;
 use std::io::BufRead;
+use std::num;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -147,7 +148,7 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
-                            resolution = [300,300];
+                            resolution = [800,800];
                             render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
@@ -232,7 +233,7 @@ pub fn main() {
         
 
         let multithreading = true;
-        if multithreading == false {
+        if !multithreading {
             render_texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
                 for x in -window_width_half..window_width_half {
                     for y in -window_height_half..window_height_half {
@@ -248,7 +249,7 @@ pub fn main() {
             }).expect("what?"); 
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw to texture");
         }
-        if multithreading == true {
+        if multithreading {
             //create channels for communication between threads
             let (tx, rx) = mpsc::channel();
 
@@ -260,7 +261,8 @@ pub fn main() {
             .progress_chars("#>-"));
 
             //spawn multiple threads to update different sections of the texture
-            let handles: Vec<_> = (0..10)
+            let num_of_threads = 100;
+            let handles: Vec<_> = (0..num_of_threads)
             .map(|i| {
                 let counter = Arc::clone(&shared_counter);
                 let pb_clone = Arc::clone(&pb);
@@ -274,11 +276,12 @@ pub fn main() {
                 let global_illumination = global_illumination.clone();
                 let smooth_shadows = global_illumination.clone();
                 let res = resolution.clone();
+                let thread_num = num_of_threads.clone();
                 thread::spawn(move || {
                     let pb_unwrap: std::sync::MutexGuard<'_, ProgressBar> = pb_clone.lock().unwrap();
                     let mut counter: std::sync::MutexGuard<'_, i32> = counter.lock().unwrap();
                     update_texture_region(i, tx, render_chance, &mut camera_position, &z_rotation_matrix,
-                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, &mut *counter, pb_unwrap);
+                    &x_rotation_matrix, &y_rotation_matrix, global_illumination, smooth_shadows, res, &mut *counter, pb_unwrap, thread_num);
                 })
             }).collect();
 
@@ -332,7 +335,7 @@ pub fn main() {
                     modified_render_texture.update(None, pixels, pitch).expect("could not copy section");
                 }).expect("could not copy section");
 
-                apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture, &mut buffer, &pixel_pitch);
+                buffer = apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture, &mut buffer, &pixel_pitch);
 
                 // ! make image
                 let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
@@ -343,7 +346,7 @@ pub fn main() {
             canvas.copy(&render_texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
             canvas.present();
 
-            for _ in 0..10{
+            for _ in 0..num_of_threads{
                 tx.send(Vec::new()).unwrap();
             }
         }
@@ -381,14 +384,14 @@ fn apply_fxaa<'a>(
     texture: &mut Texture<'a>,
     buffer: &mut Vec<u8>,
     pitch: &usize
-){
+) -> Vec<u8>{
     // Extract the pixel data from the texture
     let query = texture.query();
     let (width, height) = (query.width as usize, query.height as usize);
     let mut pixels: Vec<u8> = vec![0; ((width * height * 3)) as usize];
 
     // Apply FXAA
-    pixels = fxaa(buffer, width, height, pitch);
+    return fxaa(buffer, width, height, pitch);
 
     // Update the texture with the modified pixels
 
@@ -396,10 +399,15 @@ fn apply_fxaa<'a>(
     //canvas.copy(texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
 
 }
-fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8> {
+fn fxaa(pixels: &Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8> {
     let mut luma_current;
     let mut luma_down: f32;
     let mut luma_right;
+    let mut new_buffer = pixels.clone();
+    
+    let r_lum_mult = 0.2126;
+    let g_lum_mult = 0.7152;
+    let b_lum_mult = 0.0722;
 
     for y in 0..(height-3) {
         for x in 0..(width-6) {
@@ -407,14 +415,14 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
             let down_offset = ((y + 1) * width + x) as usize * 3;
 
             // Calculate luminance for the current pixel and its neighbors
-            luma_current = 0.299 * pixels[offset] as f32 + 0.587 * pixels[offset + 1] as f32 + 0.114 * pixels[offset+2] as f32;
+            luma_current = r_lum_mult * pixels[offset] as f32 + g_lum_mult * pixels[offset + 1] as f32 + b_lum_mult * pixels[offset+2] as f32;
             if x > 0 {
-                luma_right = 0.299 * pixels[offset + 3] as f32 + 0.587 * pixels[offset + 4] as f32 + 0.114 * pixels[offset + 5] as f32;
+                luma_right = r_lum_mult * pixels[offset + 3] as f32 + g_lum_mult * pixels[offset + 4] as f32 + b_lum_mult * pixels[offset + 5] as f32;
             } else {
                 luma_right = luma_current;
             }
             if y > 0 {
-                luma_down = 0.299 * pixels[down_offset] as f32 + 0.587 * pixels[down_offset + 1] as f32 + 0.114 * pixels[down_offset + 2] as f32;
+                luma_down = r_lum_mult * pixels[down_offset] as f32 + g_lum_mult * pixels[down_offset + 1] as f32 + b_lum_mult * pixels[down_offset + 2] as f32;
             } else {
                 luma_down = luma_current;
             }
@@ -434,35 +442,31 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
             //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
-            if contrast_right >= 40.0 { // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
+            if contrast_right >= 120.0 || (luma_right == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_right > 30.0){ // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
                 // Apply a simple blur filter to the pixel;
                 for i in 0..3 {
                     let neighbor_pixel_right = pixels[offset + 3 + i];
-                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_right) / 2;
-                    if pixels[offset+i] > 255 {
-                        println!("right max")
-                    }
+                    new_buffer[offset + i] = (pixels[offset + i] + neighbor_pixel_right) / 2;
                 }
+                println!("this happen")
             }
-            else if contrast_down >= 40.0 {
+            if contrast_down >= 120.0 || (luma_down == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_down > 30.0) {
                 for i in 0..3 {
                     let neighbor_pixel_down = pixels[down_offset + i];
-                    pixels[offset + i] = (pixels[offset + i] + neighbor_pixel_down) / 2;
-                    if pixels[offset+i] > 255 {
-                        println!("down max")
-                    }
+                    new_buffer[offset + i] = (pixels[offset + i] + neighbor_pixel_down) / 2;
                 }
+                println!("this happen")
 
             // ! i think the issue might be that changes in the average color are effecting right and below calculations, therefore the we change should be different
             // ! from the one we analyse
             }
         }
     }
-    return pixels.to_vec()
+    return new_buffer.to_vec()
 }
 
 fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8))>>, render_chance_max: i32, camera_position: &mut [f64; 3], z_rotation_matrix: &[[f64; 3]; 3], x_rotation_matrix: &[[f64; 3]; 3]
-, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2], percent_counter: &mut i32, pb :std::sync::MutexGuard<'_, ProgressBar>){
+, y_rotation_matrix: &[[f64; 3]; 3], global_illumination: bool, smooth_shadows: bool, resolution: [u32; 2], percent_counter: &mut i32, pb :std::sync::MutexGuard<'_, ProgressBar>, num_of_threads: usize){
     // --temp--
     //define variables
 
@@ -482,7 +486,7 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let view_width = (resolution[0] as f64) * fov;
     let view_height = (resolution[1] as f64) * fov;
 
-    let num_of_threads = 10;
+    let num_of_threads = num_of_threads as u32;
     let render_width = resolution[0]/num_of_threads; //width/numofthreads
 
 
