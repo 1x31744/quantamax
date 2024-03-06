@@ -434,7 +434,7 @@ fn fxaa(pixels: &mut Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec
             //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
-            if contrast_right >= 30.0 || contrast_down >= 30.0 {
+            if contrast_right >= 45.0 || contrast_down >= 45.0 { // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
                 // Apply a simple blur filter to the pixel;
                 for i in 0..3 {
                     let neighbor_pixel_right = if x < width - 1 {
