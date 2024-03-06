@@ -261,7 +261,7 @@ pub fn main() {
             .progress_chars("#>-"));
 
             //spawn multiple threads to update different sections of the texture
-            let num_of_threads = 100;
+            let num_of_threads = 1000;
             let handles: Vec<_> = (0..num_of_threads)
             .map(|i| {
                 let counter = Arc::clone(&shared_counter);
