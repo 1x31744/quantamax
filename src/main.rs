@@ -443,7 +443,7 @@ fn fxaa(pixels: &Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8>
             //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
-            if contrast_right >= 120.0 || (luma_right == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_right > 30.0){ // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
+            if contrast_right >= 50.0 || (luma_right == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_right > 30.0){ // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
                 // Apply a simple blur filter to the pixel;
                 for i in 0..3 {
                     let neighbor_pixel_right = pixels[offset + 3 + i];
@@ -451,7 +451,7 @@ fn fxaa(pixels: &Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8>
                 }
                 println!("this happen")
             }
-            if contrast_down >= 120.0 || (luma_down == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_down > 30.0) {
+            if contrast_down >= 50.0 || (luma_down == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_down > 30.0) {
                 for i in 0..3 {
                     let neighbor_pixel_down = pixels[down_offset + i];
                     new_buffer[offset + i] = (pixels[offset + i] + neighbor_pixel_down) / 2;
