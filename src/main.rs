@@ -4,6 +4,8 @@ extern crate image;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
+use std::io;
+use std::io::Write;
 use std::sync::atomic::Ordering;
 use rand::Rng;
 use cond_utils::Between;
@@ -151,7 +153,7 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
-                            resolution = [800,800];
+                            resolution = [500,500];
                             render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
@@ -497,6 +499,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
     let end_point = res_width_half - (render_width * (max_negate_id) as u32) as i32;
 
+    let stdout = io::stdout();
+    let lock = stdout.lock();
+    let mut w = io::BufWriter::new(lock);
     
     let max_pixels = resolution[0] * resolution[1];
     let mut rng = rand::thread_rng();
@@ -515,7 +520,8 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             percent_counter.fetch_add(1, Ordering::SeqCst); // add 1
             let value = percent_counter.load(Ordering::SeqCst);
             if (value as u64 % UPDATE_FREQUENCY == 0 || value == 1) && global_illumination{
-                println!("{}%", (value as f32/max_pixels as f32) * 100.0);
+                //println!("{}%", (value as f32/max_pixels as f32) * 100.0);
+                writeln!(w, "{}%", (value as f32/max_pixels as f32) * 100.0).expect("could not write to terminal");
             }
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
