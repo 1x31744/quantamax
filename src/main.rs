@@ -138,7 +138,7 @@ pub fn main() {
                             r_pressed = false;
                         }
                         else if r_pressed == false {
-                            resolution = [500,500];
+                            resolution = [1000,1000];
                             render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
                             render_chance = 1000;
                             global_illumination = true;
@@ -457,9 +457,9 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
     let res_width_half: i32 = (resolution[0]/2) as i32;
     let res_height_half: i32 = (resolution[1]/2) as i32;
     let sphere1 = Sphere::new(1.0, [0.0,-1.5, 1.5], [225,0,0] , -1.0, 0.5);
-    let sphere2 = Sphere::new(1.0, [-1.5,-0.5,1.7], [255,192,203], 500.0, 0.5);
-    let sphere3 = Sphere::new(1.0, [1.5,-0.5, 1.7], [0,0,225], 500.0, 0.5);
-    let shere5 = Sphere::new(5000.0, [0.0,-5001.0,0.0], [225,225,0], -1.0, 0.2);
+    let sphere2 = Sphere::new(1.0, [-1.5,-0.5,1.7], [255,192,203], -1.0, 0.0);
+    let sphere3 = Sphere::new(1.0, [1.5,-0.5, 1.7], [0,0,225], 500.0, 1.0);
+    let shere5 = Sphere::new(5000.0, [0.0,-5001.0,0.0], [100,75,80], -1.0, 0.2);
     let spheres = vec![sphere2,sphere1,sphere3,shere5];
 
     let light = Light::new(0.7, String::from("Point"), [-5.0,1.0,0.0], [0.0,0.0,0.0], 0.5);
