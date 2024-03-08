@@ -2,27 +2,12 @@ extern crate sdl2;
 // Add this import for the image crate
 extern crate image;
 
-use indicatif::{ProgressBar, ProgressStyle};
-
-use std::io;
-use std::io::Write;
 use std::sync::atomic::Ordering;
 use rand::Rng;
 use cond_utils::Between;
-use sdl2::pixels;
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::render;
-use sdl2::render::Canvas;
-use sdl2::render::TextureAccess;
-use sdl2::render::TextureCreator;
-use sdl2::sys::Atom;
-use sdl2::video::WindowContext;
-use std::clone;
-use std::io::BufRead;
-use std::num;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::thread;
 use std::vec;
 use sdl2::event::Event;
@@ -338,7 +323,7 @@ pub fn main() {
                     modified_render_texture.update(None, pixels, pitch).expect("could not copy section");
                 }).expect("could not copy section");
 
-                buffer = apply_fxaa(&texture_creator, &mut canvas, &mut modified_render_texture, &mut buffer, &pixel_pitch);
+                buffer = apply_fxaa( &mut modified_render_texture, &mut buffer);
 
                 // ! make image
                 let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
@@ -382,19 +367,15 @@ pub fn main() {
 }
 
 fn apply_fxaa<'a>(
-    texture_creator: &'a TextureCreator<WindowContext>,
-    canvas: &mut Canvas<sdl2::video::Window>,
     texture: &mut Texture<'a>,
     buffer: &mut Vec<u8>,
-    pitch: &usize
 ) -> Vec<u8>{
     // Extract the pixel data from the texture
     let query = texture.query();
     let (width, height) = (query.width as usize, query.height as usize);
-    let mut pixels: Vec<u8> = vec![0; ((width * height * 3)) as usize];
 
     // Apply FXAA
-    return fxaa(buffer, width, height, pitch);
+    return fxaa(buffer, width, height);
 
     // Update the texture with the modified pixels
 
@@ -402,7 +383,7 @@ fn apply_fxaa<'a>(
     //canvas.copy(texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
 
 }
-fn fxaa(pixels: &Vec<u8>, width: usize, height: usize, pitch: &usize) -> Vec<u8> {
+fn fxaa(pixels: &Vec<u8>, width: usize, height: usize) -> Vec<u8> {
     let mut luma_current;
     let mut luma_down: f32;
     let mut luma_right;
@@ -498,10 +479,6 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
 
     let max_negate_id = (num_of_threads - (thread_id + 1) as u32) as i32;
     let end_point = res_width_half - (render_width * (max_negate_id) as u32) as i32;
-
-    let stdout = io::stdout();
-    let lock = stdout.lock();
-    let mut w = io::BufWriter::new(lock);
     
     let max_pixels = resolution[0] * resolution[1];
     let mut rng = rand::thread_rng();
@@ -520,8 +497,8 @@ fn update_texture_region(thread_id: usize, tx: Sender<Vec<(u32, u32, (u8, u8, u8
             percent_counter.fetch_add(1, Ordering::SeqCst); // add 1
             let value = percent_counter.load(Ordering::SeqCst);
             if (value as u64 % UPDATE_FREQUENCY == 0 || value == 1) && global_illumination{
-                //println!("{}%", (value as f32/max_pixels as f32) * 100.0);
-                writeln!(w, "{}%", (value as f32/max_pixels as f32) * 100.0).expect("could not write to terminal");
+                println!("{}%", (value as f32/max_pixels as f32) * 100.0);
+                //writeln!(w, "{}%", (value as f32/max_pixels as f32) * 100.0).expect("could not write to terminal");
             }
 
             update.push((canvas_coords.0 as u32, canvas_coords.1 as u32, (color[0], color[1], color[2])));
