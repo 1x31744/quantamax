@@ -74,14 +74,11 @@ pub fn main() {
         .build()
         .unwrap();
 
-    //let res_multiplier: u32 = 1; //temp
     let mut resolution: [u32; 2] = [200, 200]; 
     let mut canvas = window.into_canvas().build().unwrap();
-    //canvas.set_logical_size(resolution[0], resolution[1]).expect("could not set res");
     let mut event_pump = sdl_context.event_pump().unwrap();
     let texture_creator = canvas.texture_creator();
     let mut render_texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24,resolution[0] + 1, resolution[1] + 1).map_err(|e| e.to_string()).unwrap();
-    //let mut surface = window.surface(&event_pump);
 
     let window_width_half: i32 = (resolution[0]/2) as i32;
     let window_height_half: i32 = (resolution[1]/2) as i32;
@@ -243,19 +240,12 @@ pub fn main() {
             //create channels for communication between threads
             let (tx, rx) = mpsc::channel();
 
-            // Create a shared integer variable wrapped in Arc and Mutex
             let counter = Arc::new(AtomicUsize::new(0));
-            //let pb = Arc::new(Mutex::new(ProgressBar::new((resolution[0] * resolution[1]) as u64)));
-            //pb.lock().unwrap().set_style(ProgressStyle::default_bar()
-            //.template("[{elapsed_precise}] {bar:40.red/pink} {percent}% {pos}/{len} {msg}")
-            //.progress_chars("#>-"));
-
-            //spawn multiple threads to update different sections of the texture
             let num_of_threads = 10;
             let handles: Vec<_> = (0..num_of_threads)
             .map(|i| {
+
                 let counter_clone = Arc::clone(&counter);
-                //let pb_clone = Arc::clone(&pb);
 
                 let tx = tx.clone();
                 let render_chance = render_chance.clone();
@@ -299,7 +289,7 @@ pub fn main() {
 
             // Save the texture as an image and apply fxxa
             if global_illumination {
-                // ! apply fxxa first
+                // apply fxxa first
                 let mut buffer: Vec<u8> = vec![0; ((resolution[0] * resolution[1] * 3)) as usize]; // Assuming RGB format
                 let mut pixel_pitch: usize = 0;
                 render_texture.with_lock(None, |data, pitch: usize| {
@@ -325,7 +315,7 @@ pub fn main() {
 
                 buffer = apply_fxaa( &mut modified_render_texture, &mut buffer);
 
-                // ! make image
+                // make image
                 let img = image::RgbImage::from_raw(resolution[0], resolution[1], buffer).unwrap();
                 let path = "output.png";
                 img.save(path).unwrap();
@@ -362,7 +352,6 @@ pub fn main() {
             }
         }
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-        //break;
     }
 }
 
@@ -376,11 +365,6 @@ fn apply_fxaa<'a>(
 
     // Apply FXAA
     return fxaa(buffer, width, height);
-
-    // Update the texture with the modified pixels
-
-    //texture.update(None, &pixels, (width * 3) as usize * 3 as usize).map_err(|e| e.to_string()).expect("hmm these are some pretty good error");
-    //canvas.copy(texture, None, Rect::new(0, 0, WIDTH, HEIGHT)).expect("could not draw");  
 
 }
 fn fxaa(pixels: &Vec<u8>, width: usize, height: usize) -> Vec<u8> {
@@ -411,19 +395,9 @@ fn fxaa(pixels: &Vec<u8>, width: usize, height: usize) -> Vec<u8> {
                 luma_down = luma_current;
             }
 
-            //println!("Current pixel: ({}, {})", x, y);
-            //println!("Luminance current: {}", luma_current);
-            //println!("Luminance down: {}", luma_down);
-            //println!("Luminance right: {}", luma_right);
-    
-
             // Calculate contrast between the current pixel and its neighbors
-            //println!("{}, {}", luma_current, luma_right);
             let contrast_down = (luma_current - luma_down).abs();
             let contrast_right = (luma_current - luma_right).abs();
-            //println!("contrast down is: {}", contrast_down);
-            //println!("contrast right is: {}", contrast_right);
-            //println!("{}",contrast_right);
             
             // Apply FXAA if the contrast is high
             if contrast_right >= 50.0 || (luma_right == 0.0 && luma_current > 30.0) || (luma_current == 0.0 && luma_right > 30.0){ // TODO: try doing this seperately, handle right contrast differently to down, otherwise bad things considered
@@ -440,9 +414,6 @@ fn fxaa(pixels: &Vec<u8>, width: usize, height: usize) -> Vec<u8> {
                     new_buffer[offset + i] = (pixels[offset + i] + neighbor_pixel_down) / 2;
                 }
                 println!("this happen")
-
-            // ! i think the issue might be that changes in the average color are effecting right and below calculations, therefore the we change should be different
-            // ! from the one we analyse
             }
         }
     }
@@ -554,7 +525,6 @@ fn trace_ray(camera_origin: &[f64; 3], view: [f64; 3], tmin: f64, tmax: f64, lig
     if closest_sphere == None {
         return [0, 0, 0]
     }
-    //assert_eq!(intersects,vec![0.0, 0.0]);
 
     let unwraped_sphere = closest_sphere.unwrap();
 
@@ -622,31 +592,10 @@ fn trace_ray(camera_origin: &[f64; 3], view: [f64; 3], tmin: f64, tmax: f64, lig
     return global_color;
 }
 
-// ! may use later, as finding the intersects is used in alot of places in code, using a function for it may be a little better, especially when adding other mediums
-/*  
-fn find_intersects(camera_origin: &Vec<f64>, view: &Vec<f64>, tmin: f64, tmax: f64, spheres: & mut Vec<Sphere>) -> (Option<&mut Sphere>, f64) {
-    let mut closest_sphere: Option<& mut Sphere> = None;
-    let mut closest_t: f64 = f64::INFINITY;
-    let mut intersects: Vec<f64>;
-    for sphere in spheres{
-        intersects = intersect_ray_sphere(&camera_origin, &view, sphere); //two intersections
-        if intersects[1].within(tmin, tmax) && intersects[1] < closest_t {
-            closest_t = intersects[1];
-            closest_sphere = Some(sphere)
-        }
-        if intersects[0].within(tmin, tmax) && intersects[0] < closest_t {
-            closest_t = intersects[0];
-        }
-    }
-    return  (closest_sphere, closest_t);
-}
-*/
-
 fn intersect_ray_sphere(camera_origin: &[f64; 3], view: &[f64; 3], sphere: &Sphere) -> [f64; 2] {
     let radius = sphere.radius;
     let camera_to_center = [camera_origin[0] - sphere.center[0], camera_origin[1] - sphere.center[1], camera_origin[2] - sphere.center[2]];
-    //let camera_to_center = vec![sphere.center[0] - camera_origin[0], sphere.center[1] - camera_origin[1], sphere.center[2] - camera_origin[2]];
-    //println!("{:?}",camera_to_center);
+    // ! explanation for math used in intersection code
     //ray equation moddeled by point = t*view + camera_origin
     //circle equation moddled by dot_product(point - center, point - center) = r^2
     //sub ray into circle: dot_product((t*view+camera_origin) - center, (t*view+camera_origin) - center) = r^2
@@ -761,7 +710,6 @@ fn compute_lighting(intersection: &[f64; 3], normal: &[f64; 3], light: &Vec<Ligh
 fn compute_shadows_percentage(light: &Light, spheres: &Vec<Sphere>, light_position: &[f64; 3], intersection: &[f64; 3])  -> f64{ //u8 is percentage illumination
     // ! compute angle from point, light_center and light edge
     let num_of_samples = 100;
-    //let mut rng = rand::thread_rng();
     let mut successful_samples = 0;
     for _ in 0..num_of_samples {
 
